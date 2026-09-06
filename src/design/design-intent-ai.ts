@@ -102,6 +102,32 @@ async function brainChatViaWeb(messages: BrainChatMessage[]): Promise<string | n
 }
 
 /**
+ * V8.2 — pont générique vers le SOPHENIC Brain EXISTANT (desktop IPC puis
+ * route web). Réutilisé par le Design Intent Engine et le Room Understanding
+ * Engine : Design reste une compétence du Brain, pas un cerveau séparé.
+ */
+export async function chatWithExistingBrain(messages: BrainChatMessage[], effortMode: DesignIntentEffortMode = "auto"): Promise<{ content: string | null; failures: string[] }> {
+  const failures: string[] = [];
+  try {
+    const desktopContent = await brainChatViaDesktop(messages, effortMode);
+    if (desktopContent) return { content: desktopContent, failures };
+    failures.push("Brain desktop indisponible");
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const webContent = await brainChatViaWeb(messages);
+      if (webContent) return { content: webContent, failures };
+      failures.push("réponse web vide");
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return { content: null, failures };
+}
+
+/**
  * Résout le Design Intent V8.1 :
  * 1. intent heuristique déterministe (toujours construit, sert de garde-fou) ;
  * 2. si le Brain existant répond, l'intent est enrichi/validé champ par champ
@@ -138,3 +164,6 @@ export async function resolveDesignIntent(input: { project: DesignProject; instr
   }
   return { intent: base, origin: "heuristic", notice: failures.length ? `Design Intent déterministe (IA indisponible : ${failures[0]}).` : "Design Intent déterministe." };
 }
+
+/** V8.2 — parse JSON tolérant réutilisé par les compétences du Brain. */
+export { parseJsonLoose as parseBrainJson };

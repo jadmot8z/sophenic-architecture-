@@ -5,7 +5,7 @@ import {
   ArrowLeft, Armchair, Box, Building2, Check, ChevronDown, Code2, Copy, Crosshair, DoorOpen, Download,
   FileCode2, Files, FlaskConical, FolderOpen, Globe2, History, Layers3, Loader2, MessageSquareText, Monitor,
   MousePointer2, Package, Palette, PanelLeft, Plus, Redo2, RotateCcw, Ruler, Save, Send, Smartphone,
-  Sparkles, Square, Footprints, Tablet, Trash2, Undo2, Upload, WandSparkles, X, Sun, Moon
+  Sparkles, Square, Footprints, Tablet, Trash2, Undo2, Upload, WandSparkles, X, Sun, Moon, ScanEye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,10 @@ import { runArchitectureQualityPass } from "@/design/architecture-quality";
 import { applyArchitectureBrief, architectureBriefSummary, parseArchitectureBrief } from "@/design/interior-brief";
 import { analyzeReferenceText, buildArchitectureIntent, designIntentSummary } from "@/design/design-intent";
 import { resolveDesignIntent } from "@/design/design-intent-ai";
-import { assetQueryForObject as intentAwareAssetQuery, assetRequirementsForIntent, noAssetMessage } from "@/design/asset-requirements";
+import { resolveRoomBlueprint, parseRoomBlueprint, blueprintSummaryLines, ROOM_UNDERSTANDING_VISION_PROMPT } from "@/design/room-understanding";
+import { expandAssetQueries, recordAssetGap, ASSET_GAP_MESSAGE, qualityScore, reasonSelected } from "@/design/asset-intelligence";
+import { scoreDesignAssetForIntent } from "@/design/asset-selection";
+import { assetQueryForObject as intentAwareAssetQuery, assetRequirementsForIntent } from "@/design/asset-requirements";
 import { selectBestDesignAsset, selectBestDesignAssetForIntent } from "@/design/asset-selection";
 import type { DesignAiAction, DesignAiPlan, DesignAssetSearchResult, DesignDomain, DesignMaterial, DesignProject, DesignTool, DesignVersionSnapshot, DesignWebChange } from "@/design/types";
 
@@ -55,6 +58,7 @@ const planTools: Array<{ id: DesignTool; label: string; icon: typeof MousePointe
  ];
 
 function architectureActionLabel(action: DesignAiAction): string {
+  if (action.type === "rebuild_room") return `Reconstruire entièrement « ${action.room} » (suppression + nouvelle composition d'après l'image)`;
   if (action.type === "apply_architecture_program") return `Construire le programme ${action.program.archetype === "palace" ? "palais monumental" : action.program.archetype === "villa" ? "villa contemporaine" : "maison"} (${action.program.levels.length} niveau(x), murs ${action.program.wallHeight.toFixed(1)} m)`;
   if (action.type === "set_villa_program") return `Construire la villa sur ${action.levels.length} niveau(x)`;
   if (action.type === "add_stairs_connection") return `Créer l’escalier niveau ${action.fromLevel + 1} → ${action.toLevel + 1}`;
@@ -136,15 +140,30 @@ async function enrichGeneratedArchitectureAssets(project: DesignProject, objectI
   for (let index = 0; index < objects.length; index += 1) {
     const object = objects[index];
     try {
-      const query = assetSearchQueryForObject(object, next);
-      progress(`Sketchfab ${index + 1}/${objects.length} · ${object.name}`);
-      const results = await designApi.searchAssets(query, 16) as DesignAssetSearchResult[];
-      // V8.1 : ranking IA avec style-matching de l'intent (jamais d'asset inventé).
-      const candidate = selectBestDesignAssetForIntent(results, query, intent) || selectBestDesignAsset(results, query);
-      if (!candidate) { warnings.push(noAssetMessage(null, object.name)); continue; }
-      progress(`Téléchargement · ${candidate.name}`);
-      const cached = await designApi.cacheAsset(candidate);
+      // V8.2 — ASSET INTELLIGENCE : JAMAIS le nom exact. La requête dérivée de
+      // l'intent est complétée par l'expansion d'intention (style/matériau) ;
+      // chaque requête est essayée jusqu'à trouver un asset compatible.
+      const plan = expandAssetQueries(object.name, next);
+      const queries = [assetSearchQueryForObject(object, next), ...plan.queries].filter((query, position, all) => query && all.indexOf(query) === position).slice(0, 5);
+      let chosen: { candidate: DesignAssetSearchResult; query: string } | null = null;
+      for (const query of queries) {
+        progress(`Sketchfab ${index + 1}/${objects.length} · ${query}`);
+        const results = await designApi.searchAssets(query, 16) as DesignAssetSearchResult[];
+        // V8.1 : ranking IA avec style-matching de l'intent (jamais d'asset inventé).
+        const candidate = selectBestDesignAssetForIntent(results, query, intent) || selectBestDesignAsset(results, query);
+        if (candidate) { chosen = { candidate, query }; break; }
+      }
+      if (!chosen) {
+        // V8.2 : aucun fallback silencieux — manque enregistré + message explicite.
+        const gap = recordAssetGap(next, object.name, plan);
+        warnings.push(`${gap.message} ${gap.proposal}`);
+        continue;
+      }
+      const scored = scoreDesignAssetForIntent(chosen.candidate, chosen.query, intent);
+      progress(`Téléchargement · ${chosen.candidate.name}`);
+      const cached = await designApi.cacheAsset(chosen.candidate);
       object.asset = { provider: "sketchfab", sourceId: cached.sourceId, cacheId: cached.cacheId, entryPath: cached.entryPath, sourceUrl: cached.sourceUrl, thumbnailUrl: cached.thumbnailUrl, author: cached.author, license: cached.license, status: "ready" };
+      object.metadata = { ...object.metadata, assetQuery: chosen.query, qualityScore: qualityScore(scored.score), reasonSelected: reasonSelected(object.name, plan, scored.reasons, chosen.query) };
     } catch (error) {
       warnings.push(`${object.name} : ${error instanceof Error ? error.message : "import Sketchfab impossible"}`);
     }
@@ -164,12 +183,26 @@ async function enrichArchitectureAssets(project: DesignProject, actions: DesignA
   for (const action of actions) {
     if (action.type !== "add_object" || action.category === "stairs" || action.asset) { resolved.push(action); continue; }
     try {
-      assetIndex += 1; const query = assetSearchQuery(action, project); progress(`Recherche Sketchfab ${assetIndex}/${furnitureActions.length} · ${action.name}`);
-      const results = await designApi.searchAssets(query, 16) as DesignAssetSearchResult[];
-      const candidate = selectBestDesignAssetForIntent(results, query, intent) || selectBestDesignAsset(results, query);
-      if (!candidate) { warnings.push(noAssetMessage(null, action.name)); resolved.push(action); continue; }
-      progress(`Téléchargement & cache · ${candidate.name}`);
-      const cached = await designApi.cacheAsset(candidate);
+      // V8.2 — expansion d'intention multi-requêtes (jamais le nom exact).
+      assetIndex += 1;
+      const plan = expandAssetQueries(action.name, project);
+      const queries = [assetSearchQuery(action, project), ...plan.queries].filter((query, position, all) => query && all.indexOf(query) === position).slice(0, 5);
+      let chosen: { candidate: DesignAssetSearchResult; query: string } | null = null;
+      for (const query of queries) {
+        progress(`Recherche Sketchfab ${assetIndex}/${furnitureActions.length} · ${query}`);
+        const results = await designApi.searchAssets(query, 16) as DesignAssetSearchResult[];
+        const candidate = selectBestDesignAssetForIntent(results, query, intent) || selectBestDesignAsset(results, query);
+        if (candidate) { chosen = { candidate, query }; break; }
+      }
+      if (!chosen) {
+        const gap = recordAssetGap(project, action.name, plan);
+        warnings.push(`${gap.message} ${gap.proposal}`);
+        resolved.push(action);
+        continue;
+      }
+      const scored = scoreDesignAssetForIntent(chosen.candidate, chosen.query, intent);
+      progress(`Téléchargement & cache · ${chosen.candidate.name}`);
+      const cached = await designApi.cacheAsset(chosen.candidate);
       resolved.push({ ...action, asset: { provider: "sketchfab", sourceId: cached.sourceId, cacheId: cached.cacheId, entryPath: cached.entryPath, sourceUrl: cached.sourceUrl, thumbnailUrl: cached.thumbnailUrl, author: cached.author, license: cached.license, status: "ready" } });
     } catch (error) { warnings.push(`${action.name} : ${error instanceof Error ? error.message : "import Sketchfab impossible"} · modèle procédural utilisé.`); resolved.push(action); }
   }
@@ -207,6 +240,8 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const folderInput = useRef<HTMLInputElement | null>(null);
   const architectureReferenceInput = useRef<HTMLInputElement | null>(null);
+  const inspirationInput = useRef<HTMLInputElement | null>(null);
+  const [inspirationBusy, setInspirationBusy] = useState(false);
   const saveTimer = useRef<number | undefined>(undefined);
   const changeToken = useRef(0);
   const activeRef = useRef<DesignProject | null>(null);
@@ -337,6 +372,54 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
     finally { setReferenceBusy(false); if (architectureReferenceInput.current) architectureReferenceInput.current.value = ""; }
   };
 
+  // V8.2 — « Analyser une inspiration » : ROOM UNDERSTANDING via le modèle
+  // Vision du SOPHENIC Brain existant → ROOM_BLUEPRINT (dimensions, ouvertures,
+  // layout, style, matériaux, meubles, ambiance). Le blueprint devient la
+  // source de vérité primaire des transformations « Transforme ce salon en… ».
+  const analyzeInspiration = async (files?: FileList | null) => {
+    const current = activeRef.current;
+    if (!current || current.domain !== "architecture" || inspirationBusy) return;
+    const images = [...(files || [])].filter((file) => file.type.startsWith("image/")).slice(0, 1);
+    if (!images.length) { setAiError("Ajoute une image PNG/JPG/WebP à analyser."); return; }
+    setInspirationBusy(true); setAiError("");
+    const toDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error(`Lecture impossible : ${file.name}`));
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.readAsDataURL(file);
+    });
+    try {
+      const file = images[0];
+      const dataUrl = await toDataUrl(file);
+      setAiProgress("Room Understanding : analyse de l'image (architecture, layout, style, mobilier)…");
+      let analysisText = "";
+      if (window.sophenicDesktop?.design?.analyzeImage) {
+        const result = await window.sophenicDesktop.design.analyzeImage({ dataUrl, name: file.name, prompt: ROOM_UNDERSTANDING_VISION_PROMPT });
+        analysisText = result.analysis;
+      } else {
+        const response = await fetch("/api/design/vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl, name: file.name, prompt: ROOM_UNDERSTANDING_VISION_PROMPT }) });
+        const payload = await response.json() as { analysis?: string; error?: string };
+        if (!response.ok) throw new Error(payload.error || `Analyse impossible pour ${file.name}`);
+        analysisText = payload.analysis || "";
+      }
+      const assetId = uid("asset");
+      const blueprint = parseRoomBlueprint(analysisText, [assetId]);
+      if (!blueprint) throw new Error("Le modèle Vision n'a pas renvoyé de ROOM_BLUEPRINT exploitable. Réessaie avec une photo d'intérieur plus nette.");
+      const next = copy(current);
+      next.assets.unshift({ id: assetId, name: file.name, kind: "reference", mime: file.type, size: file.size, dataUrl, extractedText: analysisText, createdAt: new Date().toISOString() });
+      const analyses = [analyzeReferenceText({ assetId, name: file.name, analysis: analysisText }), ...(next.architecture?.referenceAnalyses || [])].slice(0, 12);
+      next.architecture = { ...(next.architecture || { cameraMode: "interior", roomOrder: next.plan.rooms.map((room) => room.id) }), referenceAnalyses: analyses, roomBlueprint: blueprint, designIntent: buildArchitectureIntent(next, next.architecture?.brief?.sourceInstruction || next.aiMessages.at(-1)?.content || "", analyses), sketchfabStrategy: "strict" };
+      const summary = blueprintSummaryLines(blueprint);
+      next.aiMessages.push({ id: uid("msg"), role: "assistant", content: `IMAGE ANALYSÉE (Room Understanding V8.2, ${blueprint.origin})\nStyle : ${summary.style}\nMatériaux : ${summary.materials}\nLayout : ${summary.layout}\nFurniture : ${summary.furniture}\n\nCette image est maintenant la source de vérité : demande par ex. « Transforme ce salon en style japandi » pour une reconstruction complète.`, createdAt: new Date().toISOString(), applied: true });
+      updateProject(next, `Inspiration analysée : ${file.name}`);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "Analyse de l'inspiration impossible.");
+    } finally {
+      setInspirationBusy(false); setAiProgress("");
+      if (inspirationInput.current) inspirationInput.current.value = "";
+    }
+  };
+
   const selectedContext = useMemo(() => {
     if (!active || active.domain === "web") return "";
     const selected = selectedPhysicalLabel(active, selection3d || selection);
@@ -428,7 +511,10 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
     if (architectureBrief) {
       base = applyArchitectureBrief(base, architectureBrief);
       const designIntent = buildArchitectureIntent(base, raw, base.architecture?.referenceAnalyses || []);
-      base.architecture = { ...(base.architecture || { cameraMode: "exterior", roomOrder: base.plan.rooms.map((room) => room.id) }), designIntent, sketchfabStrategy: designIntent.sketchfabStrategy };
+      // V8.2 — graine de variation : deux demandes identiques peuvent produire
+      // deux compositions différentes (aucun template figé).
+      const variationSeed = ((Date.now() >>> 0) ^ Math.floor(Math.random() * 0xffffff)) >>> 0;
+      base.architecture = { ...(base.architecture || { cameraMode: "exterior", roomOrder: base.plan.rooms.map((room) => room.id) }), designIntent, variationSeed, sketchfabStrategy: designIntent.sketchfabStrategy };
     }
     base.aiMessages.push({ id: uid("msg"), role: "user", content: raw, createdAt: new Date().toISOString() });
     let instruction = raw;
@@ -451,23 +537,38 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
         base.architecture = { ...(base.architecture || { cameraMode: "exterior", roomOrder: base.plan.rooms.map((room) => room.id) }), designIntent: resolved.intent, sketchfabStrategy: resolved.intent.sketchfabStrategy };
         const requirements = assetRequirementsForIntent(resolved.intent);
         updateWorkStep("intent", "done", `${designIntentSummary(resolved.intent)}${resolved.origin === "brain" ? " · via SOPHENIC Brain" : " · synthèse déterministe (IA indisponible)"} · ${requirements.length} besoin(s) d'assets.`);
+        // V8.2 — ROOM UNDERSTANDING : si la demande transforme une pièce et
+        // qu'aucun blueprint n'existe encore, on l'extrait des références
+        // (Vision AI via Brain, sinon dérivation locale des analyses).
+        const transformRoomRequest = /(?:transforme|transformer|refais|reinvente|r[ée]invente|change|remplace|redessine|relooke|m[ée]tamorphose).{0,60}(?:salon|s[ée]jour|chambre|cuisine|salle a manger|salle à manger|suite|bureau|pi[eè]ce|room|living|int[ée]rieur)/i.test(raw);
+        if (transformRoomRequest && !base.architecture?.roomBlueprint) {
+          updateWorkStep("references", "running", "Room Understanding : extraction du blueprint de la pièce depuis l'image (dimensions, ouvertures, layout, meubles, style)…");
+          setAiProgress("Room Understanding : lecture de l'image de référence…");
+          const understood = await resolveRoomBlueprint({ instruction: raw, references: base.architecture?.referenceAnalyses || [], effortMode });
+          if (understood.blueprint) {
+            base.architecture = { ...(base.architecture || { cameraMode: "exterior", roomOrder: base.plan.rooms.map((room) => room.id) }), roomBlueprint: understood.blueprint };
+            updateWorkStep("references", "done", `Room Understanding (${understood.origin}) : ${understood.blueprint.room || "pièce"} ${understood.blueprint.architecture.estimatedWidth || "?"}×${understood.blueprint.architecture.estimatedDepth || "?"} m · ${understood.blueprint.furniture.length} meuble(s) · ${(understood.blueprint.architecture.openings || []).length} ouverture(s).`);
+          } else {
+            updateWorkStep("references", "done", understood.notice);
+          }
+        }
         preAudit = analyzeArchitecture(base);
         updateWorkStep("structure", "running", `Audit avant intervention : ${preAudit.score}/100 · ${preAudit.roomCount} pièce(s). Sophenic synthétise le programme architectural depuis le Design Intent…`);
         setAiProgress("Construction du plan d’action…");
       }
-      const direct = fastDesignCommand(base, instruction); const plan: DesignAiPlan = direct || await requestDesignAi(base, instruction, effortMode);
+      const direct = fastDesignCommand(base, instruction, base.architecture?.variationSeed); const plan: DesignAiPlan = direct || await requestDesignAi(base, instruction, effortMode);
       let effectiveActions = plan.actions; let assetWarnings: string[] = []; let architectureQualitySummary = "";
       if (base.domain === "architecture") {
         const audit = preAudit || analyzeArchitecture(base); updateWorkStep("structure", "running", `Audit avant intervention : ${audit.score}/100 · ${plan.actions.length} action(s) retenue(s) pour respecter le brief utilisateur.`);
         const visibleActions = plan.actions.slice(0, 14).map((action, index): ArchitectureWorkStep => ({ id: `action-${index}`, label: architectureActionLabel(action), status: "queued" }));
         if (plan.actions.length > 14) visibleActions.push({ id: "action-more", label: `${plan.actions.length - 14} autre(s) action(s) coordonnées`, status: "queued" });
-        const hasAssets = plan.actions.some((action) => (action.type === "add_object" && action.category !== "stairs") || (action.type === "furnish_room" && action.preferAssets !== false));
+        const hasAssets = plan.actions.some((action) => (action.type === "add_object" && action.category !== "stairs") || (action.type === "furnish_room" && action.preferAssets !== false) || action.type === "rebuild_room");
         // V8.1 : les étapes assets/quality/final existent déjà dans la timeline
         // réelle (beginArchitectureWork) ; on n'ajoute que les sous-étapes d'actions.
         if (!hasAssets) setAiSteps((steps) => steps.filter((step) => step.id !== "assets"));
         else {
           const requirements = assetRequirementsForIntent(base.architecture?.designIntent || null);
-          updateWorkStep("assets", "running", `Besoins Sketchfab : ${requirements.slice(0, 4).map((requirement) => requirement.query).join(" · ")}…`);
+          updateWorkStep("assets", "running", `Asset Intelligence : expansion d'intention multi-requêtes (jamais le nom exact) · ${requirements.slice(0, 4).map((requirement) => requirement.query).join(" · ")}…`);
         }
         setAiSteps((steps) => [...steps, ...visibleActions]);
         const enriched = await enrichArchitectureAssets(base, effectiveActions, (value) => { setAiProgress(value); updateWorkStep("assets", "running", value); }); effectiveActions = enriched.actions; assetWarnings = enriched.warnings;
@@ -484,6 +585,7 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
           const structural = currentAction.type === "apply_architecture_program" || currentAction.type === "set_villa_program" || currentAction.type === "set_architecture_layout" || currentAction.type === "add_stairs_connection" || currentAction.type === "set_architecture_style" || currentAction.type === "set_wall_height" || currentAction.type === "add_opening";
           if (structural) updateWorkStep("structure", "running", `Action ${index + 1}/${effectiveActions.length} : ${architectureActionLabel(currentAction)}`);
           if (currentAction.type === "furnish_room") updateWorkStep("furnish", "running", `Composition de ${currentAction.room} (${currentAction.density || "balanced"})…`);
+          if (currentAction.type === "rebuild_room") updateWorkStep("furnish", "running", `Space Rebuild : suppression du mobilier de ${currentAction.room} puis reconstruction complète (layout agent + blueprint + intent)…`);
           const beforeRoomObjectCount = currentAction.type === "furnish_room" ? next.plan.objects.filter((object) => next.plan.rooms.find((room) => room.name === currentAction.room)?.id === object.roomId && object.category !== "stairs").length : 0;
           next = applyDesignActions(next, [currentAction]);
           let appliedDetail = index < 14 ? "Appliqué au modèle architectural." : "Actions coordonnées appliquées.";
@@ -494,6 +596,7 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
           }
           if (structural) updateWorkStep("structure", "done", `Programme appliqué : ${next.plan.rooms.length} pièce(s) sur ${new Set(next.plan.rooms.map((room) => room.level || 0)).size} niveau(x) · murs ${next.plan.wallHeight.toFixed(1)} m.`);
           if (currentAction.type === "furnish_room") updateWorkStep("furnish", "done", `${next.plan.objects.filter((object) => object.category !== "stairs" && object.metadata?.structural !== "column").length} meuble(s) placé(s) au total.`);
+          if (currentAction.type === "rebuild_room") updateWorkStep("furnish", "done", `${next.plan.objects.filter((object) => object.category !== "stairs" && object.metadata?.structural !== "column").length} meuble(s) dans le projet · pièce reconstruite par le Furniture Layout Agent.`);
           updateWorkStep(stepId, "done", appliedDetail);
           // Rend la progression visible dans le chat, même lorsque les opérations locales sont rapides.
           if (index < 14) await new Promise<void>((resolve) => window.setTimeout(resolve, 45));
@@ -503,7 +606,7 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
       }
       if (base.domain === "architecture") {
         const generatedObjectIds = next.plan.objects.filter((object) => !objectIdsBefore.has(object.id) && object.category !== "stairs" && !object.asset?.cacheId).map((object) => object.id);
-        const wantsAssets = effectiveActions.some((action) => (action.type === "add_object" && action.category !== "stairs") || (action.type === "furnish_room" && action.preferAssets !== false));
+        const wantsAssets = effectiveActions.some((action) => (action.type === "add_object" && action.category !== "stairs") || (action.type === "furnish_room" && action.preferAssets !== false) || action.type === "rebuild_room");
         if (wantsAssets && generatedObjectIds.length) {
           updateWorkStep("assets", "running", `${generatedObjectIds.length} objet(s) issus de la composition à enrichir.`);
           const upgraded = await enrichGeneratedArchitectureAssets(next, generatedObjectIds, (value) => { setAiProgress(value); updateWorkStep("assets", "running", value); });
@@ -594,8 +697,9 @@ Vérification automatique : ${quality.report.afterScore}/100${quality.report.fix
             <div className="min-w-0 flex-1"><DesignWebPreview project={active} inspectMode={inspectWeb} onInspectMode={setInspectWeb} onSelection={setWebSelection} onViewport={setWebViewport} /></div>
           </div>
         </> : active.domain === "architecture" ? <>
-          <PhysicalToolbar view={physicalView} onView={setArchitectureView} drawer={drawer} onDrawer={setDrawer} rooms={active.plan.rooms.map((room) => ({ id: room.id, name: room.name, level: room.level || 0 }))} activeRoomId={activeRoomId} onRoom={(roomId) => { setArchitectureRoom(roomId); setPhysicalView("interior"); }} ambience={active.architecture?.ambience || "soft"} onAmbience={(ambience) => mutate((project) => { project.architecture = { ...(project.architecture || { cameraMode: "exterior", roomOrder: project.plan.rooms.map((room) => room.id) }), cameraMode: project.architecture?.cameraMode || "exterior", roomOrder: project.architecture?.roomOrder || project.plan.rooms.map((room) => room.id), ambience, renderQuality: "high" }; }, `Ambiance ${ambience}`)} onReferences={() => architectureReferenceInput.current?.click()} referenceBusy={referenceBusy} referenceCount={active.architecture?.referenceAnalyses?.length || 0} styleLabel={active.architecture?.designIntent?.style || ""} />
+          <PhysicalToolbar view={physicalView} onView={setArchitectureView} drawer={drawer} onDrawer={setDrawer} rooms={active.plan.rooms.map((room) => ({ id: room.id, name: room.name, level: room.level || 0 }))} activeRoomId={activeRoomId} onRoom={(roomId) => { setArchitectureRoom(roomId); setPhysicalView("interior"); }} ambience={active.architecture?.ambience || "soft"} onAmbience={(ambience) => mutate((project) => { project.architecture = { ...(project.architecture || { cameraMode: "exterior", roomOrder: project.plan.rooms.map((room) => room.id) }), cameraMode: project.architecture?.cameraMode || "exterior", roomOrder: project.architecture?.roomOrder || project.plan.rooms.map((room) => room.id), ambience, renderQuality: "high" }; }, `Ambiance ${ambience}`)} onReferences={() => architectureReferenceInput.current?.click()} referenceBusy={referenceBusy} referenceCount={active.architecture?.referenceAnalyses?.length || 0} styleLabel={active.architecture?.designIntent?.style || ""} onInspiration={() => inspirationInput.current?.click()} inspirationBusy={inspirationBusy} />
           <input ref={architectureReferenceInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple className="hidden" onChange={(event) => void importArchitectureReferences(event.target.files)} />
+          <input ref={inspirationInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => void analyzeInspiration(event.target.files)} />
           <div className="relative min-h-0 flex-1 p-2.5">
             {physicalView === "plan" && <div className="flex h-full gap-2"><PlanToolRail tool={tool} onTool={setTool} /><div className="min-w-0 flex-1"><DesignCanvas2D project={active} tool={tool} selection={selection} onSelection={(value) => { setSelection(value); setSelection3d(to3dSelection(value)); }} onChange={updateProject} /></div></div>}
             {physicalView !== "plan" && <ArchitectureViewport3D project={active} mode={physicalView} activeRoomId={activeRoomId} onActiveRoom={setArchitectureRoom} selection={selection3d} onSelection={(value) => { setSelection3d(to3dSelection(value)); setSelection(to3dSelection(value)); }} />}
@@ -631,13 +735,14 @@ function ArchitectureObjectControls({ object, onEdit }: { object: DesignProject[
   return <div className="absolute bottom-3 right-3 z-30 w-[245px] rounded-2xl border border-black/10 bg-white/94 p-3 shadow-xl backdrop-blur dark:border-white/10 dark:bg-zinc-900/94"><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-semibold">{object.name}</div><div className="mt-0.5 text-[8px] uppercase tracking-[.12em] text-zinc-400">{object.category}</div></div><button type="button" onClick={() => onEdit("delete")} className="grid size-7 place-items-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40" title="Supprimer"><Trash2 className="size-3.5" /></button></div><div className="mt-2 grid grid-cols-4 gap-1"><button onClick={() => onEdit("left")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">← X</button><button onClick={() => onEdit("right")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">X →</button><button onClick={() => onEdit("forward")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">↑ Z</button><button onClick={() => onEdit("back")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">Z ↓</button><button onClick={() => onEdit("rotate-left")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">↶ 15°</button><button onClick={() => onEdit("rotate-right")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">↷ 15°</button><button onClick={() => onEdit("smaller")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">− Taille</button><button onClick={() => onEdit("larger")} className="rounded-lg bg-black/5 py-1.5 text-[10px] dark:bg-white/10">+ Taille</button></div>{object.asset?.provider === "sketchfab" && <div className="mt-2 border-t border-black/[.06] pt-2 text-[8px] leading-4 text-zinc-400 dark:border-white/[.07]">Sketchfab · {object.asset.author || "Auteur inconnu"}<br />Licence : {object.asset.license || "non renseignée"}</div>}</div>;
 }
 
-function PhysicalToolbar({ view, onView, drawer, onDrawer, rooms, activeRoomId, onRoom, ambience, onAmbience, onReferences, referenceBusy, referenceCount, styleLabel }: { view: PhysicalView; onView: (view: PhysicalView) => void; drawer: Drawer; onDrawer: (drawer: Drawer) => void; rooms: Array<{ id: string; name: string; level: number }>; activeRoomId: string; onRoom: (roomId: string) => void; ambience: "day" | "evening" | "soft"; onAmbience: (ambience: "day" | "evening" | "soft") => void; onReferences?: () => void; referenceBusy?: boolean; referenceCount?: number; styleLabel?: string }) {
+function PhysicalToolbar({ view, onView, drawer, onDrawer, rooms, activeRoomId, onRoom, ambience, onAmbience, onReferences, referenceBusy, referenceCount, styleLabel, onInspiration, inspirationBusy }: { view: PhysicalView; onView: (view: PhysicalView) => void; drawer: Drawer; onDrawer: (drawer: Drawer) => void; rooms: Array<{ id: string; name: string; level: number }>; activeRoomId: string; onRoom: (roomId: string) => void; ambience: "day" | "evening" | "soft"; onAmbience: (ambience: "day" | "evening" | "soft") => void; onReferences?: () => void; referenceBusy?: boolean; referenceCount?: number; styleLabel?: string; onInspiration?: () => void; inspirationBusy?: boolean }) {
   const ambienceModes = [["day", Sun, "Jour"], ["soft", Sparkles, "Doux"], ["evening", Moon, "Soir"]] as const;
   return <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-black/[.06] bg-white/45 px-3 py-1.5 dark:border-white/[.06] dark:bg-white/[.015]">
     <div className="flex items-center gap-1 rounded-xl bg-black/[.035] p-1 dark:bg-white/[.05]">{([['exterior', Building2, 'Extérieur'], ['interior', Crosshair, 'Intérieur'], ['plan', Ruler, 'Plan']] as const).map(([id, Icon, label]) => <button key={id} type="button" onClick={() => onView(id)} className={cn("flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-semibold", view === id ? "bg-white text-[#805b32] shadow-sm dark:bg-white/10 dark:text-zinc-100" : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200")}><Icon className="size-3.5" />{label}</button>)}</div>
     <div className="hidden items-center gap-1.5 md:flex"><span className="text-[8px] font-bold uppercase tracking-[.12em] text-zinc-400">Aller à</span><select value={activeRoomId || rooms[0]?.id || ""} onChange={(event) => onRoom(event.target.value)} className="h-8 max-w-44 rounded-lg border border-black/10 bg-white px-2 text-[10px] font-semibold text-zinc-600 outline-none hover:border-[#b58a55] dark:border-white/10 dark:bg-white/[.05] dark:text-zinc-200">{rooms.map((room) => <option key={room.id} value={room.id}>{room.level > 0 ? `Étage ${room.level} · ` : "RDC · "}{room.name}</option>)}</select></div>
     <div className="hidden items-center gap-1 rounded-xl bg-black/[.03] p-1 lg:flex dark:bg-white/[.045]">{ambienceModes.map(([id, Icon, label]) => <button key={id} type="button" title={`Ambiance ${label}`} onClick={() => onAmbience(id)} className={cn("flex h-7 items-center gap-1 rounded-lg px-2 text-[9px] font-semibold transition", ambience === id ? "bg-white text-[#805b32] shadow-sm dark:bg-white/10 dark:text-white" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200")}><Icon className="size-3" />{label}</button>)}</div>
     <button type="button" onClick={onReferences} className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10"><Upload className="size-3.5" />{referenceBusy ? "Analyse des références…" : `Ajouter références${referenceCount ? ` (${referenceCount})` : ""}`}</button>
+    <button type="button" onClick={onInspiration} className="flex h-8 items-center gap-1.5 rounded-lg bg-[#f3ead9] px-2 text-[10px] font-semibold text-[#7c5a30] hover:bg-[#eadfca] dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/15"><ScanEye className="size-3.5" />{inspirationBusy ? "Analyse de l'inspiration…" : "Analyser une inspiration"}</button>
     {styleLabel ? <div className="hidden max-w-[280px] truncate rounded-full bg-black/[.035] px-2.5 py-1 text-[8px] font-semibold uppercase tracking-[.12em] text-zinc-500 xl:block dark:bg-white/[.05]">Intent · {styleLabel}</div> : null}
     <div className="flex-1" />
     <button type="button" onClick={() => onDrawer(drawer === "materials" ? "none" : "materials")} className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10"><Palette className="size-3.5" />Matériaux</button>
@@ -673,6 +778,25 @@ function VersionDrawer({ project, onCreate, onRestore, onDuplicate, onClose }: {
   return <div className="absolute inset-y-3 right-[362px] z-40 w-[300px] overflow-hidden rounded-2xl border border-black/10 bg-white/96 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-[#181818]/96"><div className="flex h-12 items-center border-b border-black/[.06] px-3 dark:border-white/[.06]"><History className="mr-2 size-4 text-[#966d3b]" /><span className="flex-1 text-xs font-semibold">Versions</span><button onClick={onClose}><X className="size-4 text-zinc-400" /></button></div><div className="grid grid-cols-2 gap-2 p-3"><Button size="sm" onClick={onCreate} className="rounded-xl bg-[#7f5c35] text-[10px]">Créer version</Button><Button size="sm" variant="outline" onClick={onDuplicate} className="rounded-xl text-[10px]"><Copy className="mr-1 size-3" />Dupliquer</Button></div><div className="max-h-[calc(100%-100px)] overflow-auto px-3 pb-3">{project.versions.length ? project.versions.map((version) => <button key={version.id} type="button" onClick={() => onRestore(version)} className="mb-2 w-full rounded-xl border border-black/[.06] p-2.5 text-left hover:border-[#c8a67b] dark:border-white/[.07]"><div className="text-[10px] font-semibold">{version.label}</div><div className="mt-1 text-[8px] text-zinc-400">{new Date(version.createdAt).toLocaleString("fr-FR")}</div><div className="mt-1 text-[9px] text-zinc-500">{version.summary}</div></button>) : <div className="py-10 text-center text-[10px] text-zinc-400">Aucune version manuelle.</div>}</div></div>;
 }
 
+/** V8.2 — carte « IMAGE ANALYSÉE » : Room Understanding + manques d'assets. */
+function InspirationBlueprintCard({ project }: { project: DesignProject }) {
+  const blueprint = project.architecture?.roomBlueprint;
+  const gaps = project.architecture?.assetGaps || [];
+  if (!blueprint) return null;
+  const summary = blueprintSummaryLines(blueprint);
+  return <div className="mb-3 rounded-2xl border border-[#d8c9a8] bg-[#fdf9f0] p-3 dark:border-white/[.08] dark:bg-white/[.045]">
+    <div className="mb-2 flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[.16em] text-[#8a6539] dark:text-zinc-400"><ScanEye className="size-3" />Image analysée · Room Understanding V8.2</div>
+    <dl className="space-y-1.5 text-[9.5px] leading-4">
+      <div className="flex gap-2"><dt className="w-[92px] shrink-0 font-semibold text-zinc-500">Pièce</dt><dd className="min-w-0 flex-1 text-zinc-700 dark:text-zinc-200">{blueprint.room || "pièce"} · {blueprint.architecture.estimatedWidth || "?"}×{blueprint.architecture.estimatedDepth || "?"} m{blueprint.architecture.ceilingHeight ? ` · H ${blueprint.architecture.ceilingHeight} m` : ""} · {blueprint.origin}</dd></div>
+      <div className="flex gap-2"><dt className="w-[92px] shrink-0 font-semibold text-zinc-500">Style</dt><dd className="min-w-0 flex-1 text-zinc-700 dark:text-zinc-200">{summary.style}</dd></div>
+      <div className="flex gap-2"><dt className="w-[92px] shrink-0 font-semibold text-zinc-500">Matériaux</dt><dd className="min-w-0 flex-1 text-zinc-700 dark:text-zinc-200">{summary.materials}</dd></div>
+      <div className="flex gap-2"><dt className="w-[92px] shrink-0 font-semibold text-zinc-500">Layout</dt><dd className="min-w-0 flex-1 text-zinc-700 dark:text-zinc-200">{summary.layout}</dd></div>
+      <div className="flex gap-2"><dt className="w-[92px] shrink-0 font-semibold text-zinc-500">Furniture</dt><dd className="min-w-0 flex-1 text-zinc-700 dark:text-zinc-200">{summary.furniture}</dd></div>
+    </dl>
+    {gaps.length > 0 && <div className="mt-2 rounded-xl border border-amber-300/60 bg-amber-50/70 p-2 text-[9px] leading-4 text-amber-800 dark:border-amber-500/25 dark:bg-amber-950/30 dark:text-amber-200"><div className="mb-1 font-bold uppercase tracking-[.12em]">Manques Sketchfab ({gaps.length})</div>{gaps.slice(-4).map((gap) => <div key={gap.id} className="mb-1 last:mb-0">{gap.message} {gap.proposal}</div>)}</div>}
+  </div>;
+}
+
 /** V8.1 — panneau « Références analysées / Style détecté / Matériaux ». */
 function ReferenceSummaryCard({ project }: { project: DesignProject }) {
   const references = project.architecture?.referenceAnalyses || [];
@@ -697,5 +821,5 @@ function ReferenceSummaryCard({ project }: { project: DesignProject }) {
 }
 
 function SophenicPanel({ project, input, onInput, busy, progress, steps, error, onSubmit, selectedContext, onClearSelection }: { project: DesignProject; input: string; onInput: (value: string) => void; busy: boolean; progress: string; steps: ArchitectureWorkStep[]; error: string; onSubmit: (value?: string) => void; selectedContext: string; onClearSelection: () => void }) {  const messages = project.aiMessages.slice(-60); const suggestions = project.domain === "web" ? ["Rends le design de ce site beaucoup plus premium sans casser ses fonctionnalités.", "Améliore uniquement la version mobile.", "Rends la hero plus forte et la navigation plus élégante."] : project.domain === "architecture" ? ["Transforme la pièce actuelle en intérieur très haut de gamme, réaliste et détaillé : meilleurs meubles, textures, lumière, décoration et finitions, puis vérifie tout.", "Recompose la pièce avec une finition luxury : mobilier cohérent, tapis, rideaux, luminaires, plantes et détails décoratifs sans bloquer la circulation.", "Transforme toute la maison selon mon brief, compose chaque pièce comme un ensemble cohérent et vérifie style, matériaux, distances et ouvertures avant de terminer.", "Fais un audit architectural et de finition complet de la pièce actuelle.", "Ajoute une grande baie vitrée seulement si elle améliore réellement la lumière et l’usage."] : ["Rends cet objet plus élégant et plus léger visuellement.", "Propose 3 variantes avec des matériaux différents.", "Affine les proportions sans changer la largeur totale."];
-  return <aside className="flex w-[350px] max-w-[42vw] shrink-0 flex-col border-l border-black/[.07] bg-[#fbf9f5] dark:border-white/[.07] dark:bg-[#141414]"><div className="flex h-12 shrink-0 items-center gap-2 border-b border-black/[.06] px-3 dark:border-white/[.06]"><div className="grid size-7 place-items-center rounded-lg bg-[#eee3d2] text-[#876238] dark:bg-white/10"><Sparkles className="size-3.5" /></div><div><div className="text-[11px] font-semibold">Sophenic</div><div className="text-[8px] uppercase tracking-[.16em] text-zinc-400">Copilote du projet</div></div><div className="flex-1" /><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[8px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">AUTO</span></div>{selectedContext && <div className="flex items-center gap-2 border-b border-[#eadcc7] bg-[#f8efe1] px-3 py-2 text-[9px] text-[#735433] dark:border-white/[.06] dark:bg-white/[.035] dark:text-zinc-300"><Crosshair className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate">Contexte : {selectedContext}</span><button onClick={onClearSelection}><X className="size-3" /></button></div>}<div className="min-h-0 flex-1 overflow-auto p-3"><div className="mb-4 rounded-2xl bg-[#f0e7da] p-3 text-[10px] leading-5 text-[#594832] dark:bg-white/[.045] dark:text-zinc-300">Je transforme ta demande en Design Intent V8.1 via SOPHENIC Brain : style, matériaux, mobilier, lumière, monumentalité et contraintes. Tes images de référence sont analysées par le modèle Vision et orientent toute la génération. Ensuite je synthétise un programme architectural, compose chaque pièce avec les meilleurs assets Sketchfab réels disponibles et vérifie tout avant de finaliser.</div>{project.domain === "architecture" && <ReferenceSummaryCard project={project} />}{project.domain === "architecture" && <ArchitectureThinkingTimeline steps={steps} />}{messages.length ? <div className="space-y-3">{messages.map((message) => <div key={message.id} className={cn("max-w-[92%] rounded-2xl px-3 py-2.5 text-[10px] leading-5", message.role === "user" ? "ml-auto bg-[#302b25] text-white dark:bg-zinc-100 dark:text-zinc-900" : "bg-white text-zinc-600 shadow-sm ring-1 ring-black/[.05] dark:bg-white/[.045] dark:text-zinc-300 dark:ring-white/[.05]")}><div className="whitespace-pre-wrap">{message.content}</div>{message.role === "assistant" && message.applied && <div className="mt-1.5 flex items-center gap-1 text-[8px] font-semibold text-emerald-600"><Check className="size-2.5" />Appliqué au projet</div>}</div>)}</div> : <div className="space-y-2">{suggestions.map((text) => <button key={text} type="button" onClick={() => onInput(text)} className="w-full rounded-xl border border-black/[.06] bg-white/55 p-2.5 text-left text-[9px] leading-4 text-zinc-500 hover:border-[#c6a477] dark:border-white/[.07] dark:bg-white/[.025]">{text}</button>)}</div>}</div><div className="shrink-0 border-t border-black/[.06] p-3 dark:border-white/[.06]">{progress && <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#f5ecdf] px-2.5 py-1.5 text-[9px] text-[#76572f] dark:bg-white/[.05] dark:text-zinc-300"><Loader2 className="size-3 animate-spin" />{progress}</div>}{error && <div className="mb-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[9px] text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</div>}<div className="rounded-2xl border border-black/[.09] bg-white p-2 shadow-sm focus-within:border-[#c19a68] dark:border-white/10 dark:bg-white/[.035]"><textarea value={input} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} rows={3} placeholder={project.domain === "web" ? "Ex. Rends ce site 100x mieux…" : project.domain === "architecture" ? "Ex. Agrandis le salon…" : "Ex. Arrondis davantage les angles…"} className="w-full resize-none bg-transparent px-1.5 py-1 text-[11px] leading-5 outline-none placeholder:text-zinc-350" /><div className="flex items-center"><span className="px-1.5 text-[8px] text-zinc-400">Entrée pour envoyer · Maj+Entrée pour une ligne</span><div className="flex-1" /><button type="button" disabled={busy || !input.trim()} onClick={() => onSubmit()} className="grid size-8 place-items-center rounded-xl bg-[#7f5d36] text-white disabled:opacity-35">{busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}</button></div></div></div></aside>;
+  return <aside className="flex w-[350px] max-w-[42vw] shrink-0 flex-col border-l border-black/[.07] bg-[#fbf9f5] dark:border-white/[.07] dark:bg-[#141414]"><div className="flex h-12 shrink-0 items-center gap-2 border-b border-black/[.06] px-3 dark:border-white/[.06]"><div className="grid size-7 place-items-center rounded-lg bg-[#eee3d2] text-[#876238] dark:bg-white/10"><Sparkles className="size-3.5" /></div><div><div className="text-[11px] font-semibold">Sophenic</div><div className="text-[8px] uppercase tracking-[.16em] text-zinc-400">Copilote du projet</div></div><div className="flex-1" /><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[8px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">AUTO</span></div>{selectedContext && <div className="flex items-center gap-2 border-b border-[#eadcc7] bg-[#f8efe1] px-3 py-2 text-[9px] text-[#735433] dark:border-white/[.06] dark:bg-white/[.035] dark:text-zinc-300"><Crosshair className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate">Contexte : {selectedContext}</span><button onClick={onClearSelection}><X className="size-3" /></button></div>}<div className="min-h-0 flex-1 overflow-auto p-3"><div className="mb-4 rounded-2xl bg-[#f0e7da] p-3 text-[10px] leading-5 text-[#594832] dark:bg-white/[.045] dark:text-zinc-300">Je transforme ta demande en Design Intent V8.1 via SOPHENIC Brain : style, matériaux, mobilier, lumière, monumentalité et contraintes. Tes images de référence sont analysées par le modèle Vision et orientent toute la génération. Ensuite je synthétise un programme architectural, compose chaque pièce avec les meilleurs assets Sketchfab réels disponibles et vérifie tout avant de finaliser.</div>{project.domain === "architecture" && <InspirationBlueprintCard project={project} />}{project.domain === "architecture" && <ReferenceSummaryCard project={project} />}{project.domain === "architecture" && <ArchitectureThinkingTimeline steps={steps} />}{messages.length ? <div className="space-y-3">{messages.map((message) => <div key={message.id} className={cn("max-w-[92%] rounded-2xl px-3 py-2.5 text-[10px] leading-5", message.role === "user" ? "ml-auto bg-[#302b25] text-white dark:bg-zinc-100 dark:text-zinc-900" : "bg-white text-zinc-600 shadow-sm ring-1 ring-black/[.05] dark:bg-white/[.045] dark:text-zinc-300 dark:ring-white/[.05]")}><div className="whitespace-pre-wrap">{message.content}</div>{message.role === "assistant" && message.applied && <div className="mt-1.5 flex items-center gap-1 text-[8px] font-semibold text-emerald-600"><Check className="size-2.5" />Appliqué au projet</div>}</div>)}</div> : <div className="space-y-2">{suggestions.map((text) => <button key={text} type="button" onClick={() => onInput(text)} className="w-full rounded-xl border border-black/[.06] bg-white/55 p-2.5 text-left text-[9px] leading-4 text-zinc-500 hover:border-[#c6a477] dark:border-white/[.07] dark:bg-white/[.025]">{text}</button>)}</div>}</div><div className="shrink-0 border-t border-black/[.06] p-3 dark:border-white/[.06]">{progress && <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#f5ecdf] px-2.5 py-1.5 text-[9px] text-[#76572f] dark:bg-white/[.05] dark:text-zinc-300"><Loader2 className="size-3 animate-spin" />{progress}</div>}{error && <div className="mb-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[9px] text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</div>}<div className="rounded-2xl border border-black/[.09] bg-white p-2 shadow-sm focus-within:border-[#c19a68] dark:border-white/10 dark:bg-white/[.035]"><textarea value={input} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} rows={3} placeholder={project.domain === "web" ? "Ex. Rends ce site 100x mieux…" : project.domain === "architecture" ? "Ex. Agrandis le salon…" : "Ex. Arrondis davantage les angles…"} className="w-full resize-none bg-transparent px-1.5 py-1 text-[11px] leading-5 outline-none placeholder:text-zinc-350" /><div className="flex items-center"><span className="px-1.5 text-[8px] text-zinc-400">Entrée pour envoyer · Maj+Entrée pour une ligne</span><div className="flex-1" /><button type="button" disabled={busy || !input.trim()} onClick={() => onSubmit()} className="grid size-8 place-items-center rounded-xl bg-[#7f5d36] text-white disabled:opacity-35">{busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}</button></div></div></div></aside>;
 }

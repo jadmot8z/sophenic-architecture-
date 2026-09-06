@@ -1,16 +1,16 @@
 import { buildArchitectureLayout, buildVillaProgram, findPlacementInRoom, objectFitsRoom } from "./architecture";
-import { effectiveAssetVocabulary, profileForArchetype, type IntentArchetypeProfile } from "./intent-profiles";
+import { effectiveAssetVocabulary, profileForArchetype, roomDisplayName, type IntentArchetypeProfile } from "./intent-profiles";
+import { parseRoomRequests } from "./program-requests";
 import type { DesignAiAction, DesignArchitectureProgramSpec, DesignIntentSummary, DesignObject, DesignProject, DesignRoom } from "./types";
 
 /**
- * SOPHENIC DESIGN V8.1 — Program Synthesis Engine.
+ * SOPHENIC DESIGN V8.2 — Program Synthesis Engine (génératif).
  *
- * Remplace la logique de templates fixes : aucun layout n'est codé en dur dans
- * les commandes. Le programme architectural (niveaux, pièces, hauteurs,
- * colonnades, ouvertures, matériaux, mobilier, vocabulaire d'assets) est DÉRIVÉ
- * du Design Intent (voir design-intent.ts / design-intent-ai.ts). Deux intents
- * différents (palais vs villa) produisent deux architectures structurellement
- * différentes.
+ * RÈGLE ABSOLUE V8.2 : AUCUN template fixe. Plus aucun « if palace: create X ».
+ * Les niveaux, les pièces, leurs dimensions, les ouvertures et les colonnades
+ * sont SYNTHÉTISÉS depuis : le Design Intent (monumentalité, finition,
+ * matériaux), le prompt (pièces demandées, styles), et une GRAINE de variation
+ * — deux demandes identiques ne produisent donc pas forcément la même scène.
  */
 
 const uid = (prefix = "program") => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -18,78 +18,190 @@ const norm = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\
 const round = (value: number, step = 0.1) => Math.round(value / step) * step;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-/** Parse les pièces demandées explicitement (« trois chambres », « deux salles de bain »…). */
-export function parseRoomRequests(instruction: string): Array<{ name: string; usage: string }> {
-  const text = norm(instruction);
-  const word: Record<string, number> = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7 };
-  const count = (singular: string, plural: string) => {
-    const match = text.match(new RegExp(`(?:\\b(\\d+)\\b|\\b(un|une|deux|trois|quatre|cinq|six|sept)\\b)\\s+${plural}`));
-    if (match) return Number(match[1] || word[match[2]] || 0);
-    return new RegExp(`\\b${singular}\\b`).test(text) ? 1 : 0;
-  };
-  const rooms: Array<{ name: string; usage: string }> = [];
-  if (/salon|sejour|séjour|living/.test(text)) rooms.push({ name: "Salon", usage: "living" });
-  if (/cuisine/.test(text)) rooms.push({ name: "Cuisine", usage: "kitchen" });
-  if (/salle a manger|salle à manger|dining/.test(text)) rooms.push({ name: "Salle à manger", usage: "dining" });
-  const bedrooms = count("chambre", "chambres?");
-  for (let index = 1; index <= bedrooms; index += 1) rooms.push({ name: bedrooms === 1 ? "Chambre" : `Chambre ${index}`, usage: "bedroom" });
-  const bathrooms = Math.max(count("salle de bain", "salles? de bains?"), count("sdb", "sdb"));
-  for (let index = 1; index <= bathrooms; index += 1) rooms.push({ name: bathrooms === 1 ? "Salle de bain" : `Salle de bain ${index}`, usage: "bathroom" });
-  if (/bureau|office/.test(text)) rooms.push({ name: "Bureau", usage: "office" });
-  if (/garage/.test(text)) rooms.push({ name: "Garage", usage: "garage" });
-  if (/terrasse/.test(text)) rooms.push({ name: "Terrasse", usage: "terrace" });
-  return rooms.slice(0, 20);
+export { parseRoomRequests } from "./program-requests";
+
+/* ---------------------- Générateur pseudo-aléatoire seedé ---------------------- */
+
+function hashText(text: string): number {
+  let hash = 5381;
+  for (let index = 0; index < text.length; index += 1) hash = ((hash << 5) + hash + text.charCodeAt(index)) >>> 0;
+  return hash >>> 0;
 }
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------------- Synthèse générative des niveaux ---------------------- */
+
+type DraftRoom = { usage: string; width: number; depth: number; level: number; variant: number };
+
+const BASE_SIZE_BY_USAGE: Record<string, { width: number; depth: number }> = {
+  living: { width: 6.2, depth: 4.8 },
+  hall: { width: 3.4, depth: 3.0 },
+  dining: { width: 4.6, depth: 4.0 },
+  kitchen: { width: 3.9, depth: 3.6 },
+  bedroom: { width: 4.0, depth: 3.7 },
+  bathroom: { width: 2.5, depth: 2.2 },
+  office: { width: 3.4, depth: 3.1 },
+  gallery: { width: 5.4, depth: 2.9 },
+  garage: { width: 5.4, depth: 3.4 },
+  terrace: { width: 4.4, depth: 2.8 }
+};
 
 const FINISH_SCALE: Record<DesignIntentSummary["finishLevel"], number> = { light: 0.92, balanced: 1, rich: 1.06, luxury: 1.12 };
 
-function scaleRooms(profile: IntentArchetypeProfile, intent: DesignIntentSummary, instruction: string): DesignArchitectureProgramSpec["levels"] {
-  const scale = clamp(0.86 + ((intent.monumentality ?? profile.monumentality) / 100) * 0.4, 0.8, 1.5) * (FINISH_SCALE[intent.finishLevel] || 1);
+function jitter(rng: () => number, value: number, spread = 0.07): number {
+  return value * (1 + (rng() * 2 - 1) * spread);
+}
+
+/** Compose les niveaux/pièces par règles architecturales + variation seedée. */
+function generateProgramLevels(intent: DesignIntentSummary, instruction: string, seed: number): { levels: DesignArchitectureProgramSpec["levels"]; colonnadeUsages: string[] } {
+  const rng = mulberry32(seed);
+  const profile = profileForArchetype(intent.archetype === "interior" ? "house" : intent.archetype);
+  const archetype = profile.archetype;
+  const mon = clamp(intent.monumentality ?? profile.monumentality, 0, 100);
+  const scale = clamp(0.86 + (mon / 100) * 0.4, 0.8, 1.5) * (FINISH_SCALE[intent.finishLevel] || 1);
   const requests = intent.requestedRooms?.length ? intent.requestedRooms : parseRoomRequests(instruction);
-  const levels = profile.levels.map((level) => ({
-    name: level.name,
-    rooms: level.rooms.map((room) => ({ name: room.name, usage: room.usage, width: round(room.width * scale), depth: round(room.depth * scale) }))
-  }));
-  // L'utilisateur a listé des pièces (villa/maison) : on remplace le programme
-  // par défaut du niveau 1 par sa liste, dimensionnée par le profil d'archetype.
-  if (requests.length && profile.archetype !== "palace") {
-    const base = profile.levels[0]?.rooms || [];
-    const requested = requests.map((request) => {
-      const reference = base.find((room) => norm(room.name).includes(norm(request.name.split(" ")[0])) || room.usage === request.usage);
-      const size = reference || { width: 3.6, depth: 3.2 };
-      return { name: request.name, usage: request.usage || "multi-purpose", width: round(size.width * (profile.archetype === "villa" ? 1.15 : 1)), depth: round(size.depth * (profile.archetype === "villa" ? 1.15 : 1)) };
-    });
-    levels[0] = { name: profile.levels[0]?.name || "Rez-de-chaussée", rooms: requested };
-    // Les chambres demandées migrent à l'étage pour une villa multi-niveaux.
-    if (profile.archetype === "villa" && levels.length > 1 && requested.some((room) => room.usage === "bedroom")) {
-      const bedrooms = requested.filter((room) => room.usage === "bedroom");
-      levels[0] = { name: levels[0].name, rooms: requested.filter((room) => room.usage !== "bedroom") };
-      levels[1] = { name: levels[1].name, rooms: [...bedrooms, { name: "Salle de bain", usage: "bathroom", width: 3.0, depth: 2.5 }, ...(levels[1].rooms.some((room) => /bureau/.test(norm(room.name))) ? [{ name: "Bureau", usage: "office", width: 3.4, depth: 3.0 }] : [])] };
+  const colonnadeUsages: string[] = [];
+
+  // Niveaux : dérivés de la monumentalité (intime 1 → palais 3-4).
+  let levelCount: number;
+  let requestedHandled = false;
+  if (requests.length && archetype !== "palace") {
+    const hasBedroom = requests.some((room) => room.usage === "bedroom");
+    levelCount = archetype === "villa" && hasBedroom ? 2 : 1;
+  } else {
+    levelCount = clamp(1 + Math.floor(mon / 40), 1, 4);
+  }
+
+  const levels: Array<{ name?: string; rooms: Array<{ name: string; usage?: string; width?: number; depth?: number }> }> = [];
+  const usageCount: Record<string, number> = {};
+  const pushRoom = (levelIndex: number, usage: string, widthScale = 1) => {
+    const base = BASE_SIZE_BY_USAGE[usage] || { width: 3.4, depth: 3.2 };
+    const width = clamp(jitter(rng, base.width * scale * widthScale), 2.1, 26);
+    const depth = clamp(jitter(rng, base.depth * scale), 2.1, 26);
+    usageCount[usage] = (usageCount[usage] || 0) + 1;
+    const area = width * depth;
+    const name = roomDisplayName(usage, area, archetype, usageCount[usage]);
+    if (!levels[levelIndex]) levels[levelIndex] = { name: levelIndex === 0 ? "Rez-de-chaussée" : `Étage ${levelIndex}`, rooms: [] };
+    levels[levelIndex].rooms.push({ name, usage, width: round(width, .05), depth: round(depth, .05) });
+    if (mon >= 70 && (usage === "hall" || usage === "gallery")) colonnadeUsages.push(name);
+  };
+
+  if (requests.length && archetype !== "palace") {
+    // Pièces explicitement demandées par l'utilisateur : elles font foi.
+    requestedHandled = true;
+    for (const request of requests) {
+      const usage = request.usage || guessUsage(request.name);
+      const base = BASE_SIZE_BY_USAGE[usage] || { width: 3.6, depth: 3.2 };
+      usageCount[usage] = (usageCount[usage] || 0) + 1;
+      const mult = archetype === "villa" ? 1.15 : 1;
+      const width = clamp(jitter(rng, base.width * mult), 2.1, 26);
+      const depth = clamp(jitter(rng, base.depth * mult), 2.1, 26);
+      const targetLevel = usage === "bedroom" && levelCount > 1 ? 1 : 0;
+      if (!levels[targetLevel]) levels[targetLevel] = { name: targetLevel === 0 ? "Rez-de-chaussée" : "Étage 1", rooms: [] };
+      const isBathroom = usage === "bathroom";
+      const name = isBathroom && !/salle/i.test(request.name) ? roomDisplayName(usage, width * depth, archetype, usageCount[usage]) : request.name;
+      levels[targetLevel].rooms.push({ name, usage, width: round(width, .05), depth: round(depth, .05) });
+    }
+    if (levelCount > 1 && !levels[1].rooms.some((room) => room.usage === "bathroom")) levels[1].rooms.push({ name: "Salle de bain", usage: "bathroom", width: 3.0, depth: 2.5 });
+  }
+
+  if (!requestedHandled) {
+    for (let level = 0; level < levelCount; level += 1) {
+      if (level === 0) {
+        // Rez : hall → séjours → réception → cuisine → services (+ variantes seedées).
+        pushRoom(0, "hall", mon >= 70 ? 1.7 : 1);
+        pushRoom(0, "living", mon >= 70 ? 1.5 : 1);
+        if (mon >= 60 || rng() > .4) pushRoom(0, "living", 1.05); // second séjour (Salon de réception…)
+        if (mon >= 45 || rng() > .25) pushRoom(0, "dining");
+        pushRoom(0, "kitchen");
+        if (mon >= 70 && rng() > .35) pushRoom(0, "gallery");
+        pushRoom(0, "bathroom");
+      } else if (level === levelCount - 1 || level === 1) {
+        // Étages : chambres (nombre lié à la monumentalité) + services + variantes.
+        const bedrooms = clamp(Math.round(2 + mon / 45), 2, 5);
+        for (let index = 0; index < bedrooms; index += 1) pushRoom(level, "bedroom", index === 0 ? 1.15 : 1);
+        pushRoom(level, "bathroom");
+        if (mon >= 45 || rng() > .5) pushRoom(level, "office");
+        if (mon >= 70 && rng() > .4) pushRoom(level, "living", .8); // salon privé
+        if (mon >= 70 && rng() > .45) pushRoom(level, "gallery", .8);
+      } else {
+        // Niveaux supplérieaires (très monumental) : ailes invités / détente.
+        pushRoom(level, "bedroom", 1.1);
+        pushRoom(level, "bedroom");
+        pushRoom(level, "office");
+        pushRoom(level, "bathroom");
+        if (rng() > .5) pushRoom(level, "gallery", .7);
+      }
     }
   }
-  return levels;
+  return { levels: levels.filter((level) => level.rooms.length), colonnadeUsages };
 }
 
-function synthesizeOpenings(profile: IntentArchetypeProfile, intent: DesignIntentSummary, levels: DesignArchitectureProgramSpec["levels"]): DesignArchitectureProgramSpec["openings"] {
-  const monumentality = intent.monumentality ?? profile.monumentality;
-  const factor = clamp(0.9 + monumentality / 100 * 0.35, 0.9, 1.35);
-  return profile.openings
-    .filter((opening) => levels.some((level) => level.rooms.some((room) => norm(room.name).includes(norm(opening.room.replace(/\s(d’apparat|d'honneur)$/i, ""))) || norm(opening.room).includes(norm(room.name)))))
-    .map((opening) => ({ ...opening, width: round(opening.width * factor, 0.05), height: round(opening.height * factor, 0.05), sill: round(clamp(opening.sill - (monumentality > 70 ? 0.15 : 0), 0.1, 1.4), 0.05) }));
+function guessUsage(name: string): string {
+  const value = norm(name);
+  if (/salon|sejour|séjour|living/.test(value)) return "living";
+  if (/cuisine/.test(value)) return "kitchen";
+  if (/salle a manger|salle à manger|dining/.test(value)) return "dining";
+  if (/chambre|bedroom|suite/.test(value)) return "bedroom";
+  if (/salle de bain|salle d.eau|bath|douch|wc/.test(value)) return "bathroom";
+  if (/bureau|office/.test(value)) return "office";
+  if (/garage/.test(value)) return "garage";
+  if (/terrasse/.test(value)) return "terrace";
+  if (/hall|entree|entrée/.test(value)) return "hall";
+  if (/galerie/.test(value)) return "gallery";
+  return "multi-purpose";
 }
 
-/** Construit le programme architectural complet depuis le Design Intent. */
-export function synthesizeArchitectureProgram(project: DesignProject, intent: DesignIntentSummary, instruction: string): DesignArchitectureProgramSpec {
+/* ---------------------- Ouvertures générées par règles d'usage ---------------------- */
+
+function synthesizeOpenings(intent: DesignIntentSummary, profile: IntentArchetypeProfile, levels: DesignArchitectureProgramSpec["levels"]): DesignArchitectureProgramSpec["openings"] {
+  const mon = clamp(intent.monumentality ?? profile.monumentality, 0, 100);
+  const openings: DesignArchitectureProgramSpec["openings"] = [];
+  let budget = 6;
+  for (const level of levels) {
+    for (const room of level.rooms) {
+      if (budget <= 0) break;
+      const usage = room.usage || "";
+      if (!/living|dining|hall|bedroom|office/.test(usage)) continue;
+      const span = Math.max(room.width || 4, room.depth || 4);
+      if (mon >= 70) {
+        // Monumental : fenêtres hautes et larges (≥ 2,2 m), allège haute.
+        openings.push({ room: room.name, kind: "window", side: "south", width: round(clamp(span * .5, 2.2, 4.6), .05), height: round(clamp(2.2 + mon / 90, 2.4, 4), .05), sill: round(clamp(.85 - mon / 400, .6, .95), .05) });
+      } else if (mon < 60 && (usage === "living" || usage === "dining")) {
+        // Contemporain : baie vitrée large à allège basse.
+        openings.push({ room: room.name, kind: "window", side: "south", width: round(clamp(span * .62, 3.0, 4.6), .05), height: round(clamp(2.1 + mon / 100, 2.15, 2.4), .05), sill: round(clamp(.16 + mon / 500, .16, .3), .05) });
+      } else {
+        openings.push({ room: room.name, kind: "window", side: "south", width: round(clamp(span * .45, 1.6, 3), .05), height: round(clamp(1.4 + mon / 100, 1.45, 1.9), .05), sill: round(clamp(.95 - mon / 300, .6, .95), .05) });
+      }
+      budget -= 1;
+    }
+  }
+  return openings;
+}
+
+/* ---------------------- Programme complet ---------------------- */
+
+export function synthesizeArchitectureProgram(project: DesignProject, intent: DesignIntentSummary, instruction: string, seed?: number): DesignArchitectureProgramSpec {
   const profile = profileForArchetype(intent.archetype === "interior" ? "house" : intent.archetype);
-  const levels = scaleRooms(profile, intent, instruction);
+  const effectiveSeed = seed ?? hashText(`${instruction}|${intent.archetype}|${intent.finishLevel}|${intent.style}`);
+  const { levels, colonnadeUsages } = generateProgramLevels(intent, instruction, effectiveSeed);
   const wallHeight = round(clamp(intent.wallHeight || profile.wallHeight, 2.4, 8));
   const palette = intent.palette.length ? intent.palette : profile.basePalette;
   const materials = intent.materials.length ? intent.materials : profile.baseMaterials;
   const style = intent.style || profile.styleLabel;
-  const colonnadeRooms = (intent.monumentality ?? profile.monumentality) >= 70 ? profile.colonnadeRooms.filter((room) => levels.some((level) => level.rooms.some((entry) => norm(entry.name).includes(norm(room.replace(/\s(d’honneur|supérieure)$/i, ""))) || norm(room).includes(norm(entry.name))))) : [];
+  const colonnadeRooms = (intent.monumentality ?? profile.monumentality) >= 70 ? colonnadeUsages : [];
   const stairs: DesignArchitectureProgramSpec["stairs"] = [];
   for (let index = 1; index < levels.length; index += 1) {
-    const hall = levels[index - 1].rooms.find((room) => /hall|galerie|salon/i.test(`${room.usage} ${room.name}`)) || levels[index - 1].rooms.find((room) => room.usage === "living") || levels[index - 1].rooms[0];
+    const hall = levels[index - 1].rooms.find((room) => /hall|gallery/.test(room.usage || "")) || levels[index - 1].rooms.find((room) => room.usage === "living") || levels[index - 1].rooms[0];
     stairs.push({ fromLevel: index - 1, toLevel: index, room: hall?.name, width: round(1.0 + (intent.monumentality ?? profile.monumentality) / 100 * 0.35, 0.05) });
   }
   const density: DesignArchitectureProgramSpec["furnishing"][number]["density"] = intent.finishLevel === "luxury" ? "luxury" : intent.finishLevel === "rich" ? "complete" : intent.finishLevel === "light" ? "essential" : profile.archetype === "palace" ? "complete" : "balanced";
@@ -129,10 +241,10 @@ export function synthesizeArchitectureProgram(project: DesignProject, intent: De
     levels,
     stairs,
     colonnadeRooms,
-    openings: synthesizeOpenings(profile, intent, levels),
+    openings: synthesizeOpenings(intent, profile, levels),
     furnishing,
     summary: profile.archetype === "palace"
-      ? `Programme monumental « ${style} » : ${levels.length} niveaux, hauteur libre ${wallHeight.toFixed(1)} m${colonnadeRooms.length ? `, colonnades (${colonnadeRooms.join(", ")})` : ""}, ${materials.slice(0, 3).join(", ")}, ameublement ${density}.`
+      ? `Programme monumental « ${style} » : ${levels.length} niveaux, hauteur libre ${wallHeight.toFixed(1)} m${colonnadeRooms.length ? `, colonnades (${colonnadeRooms.slice(0, 2).join(", ")})` : ""}, ${materials.slice(0, 3).join(", ")}, ameublement ${density}.`
       : profile.archetype === "villa"
         ? `Programme villa « ${style} » : ${levels.length} niveau(x), hauteur libre ${wallHeight.toFixed(1)} m, baies vitrées généreuses, ${materials.slice(0, 3).join(", ")}, ameublement ${density}.`
         : `Programme maison « ${style} » : ${levels.length} niveau(x), hauteur libre ${wallHeight.toFixed(1)} m, ${materials.slice(0, 3).join(", ")}.`
@@ -183,7 +295,6 @@ export function applyArchitectureProgram(source: DesignProject, spec: DesignArch
   }
   const wallMaterial = project.materials.find((material) => material.id === "mat-wall");
   if (wallMaterial) wallMaterial.color = spec.wallColor;
-  // Escaliers inter-niveaux (mêmes règles que l'action add_stairs_connection).
   for (const stair of spec.stairs) {
     const stairRoomName = typeof stair.room === "string" ? stair.room.trim() : "";
     const sourceRoom = (stairRoomName ? project.plan.rooms.find((room) => norm(room.name).includes(norm(stairRoomName)) || norm(stairRoomName).includes(norm(room.name))) : undefined) || project.plan.rooms.find((room) => (room.level || 0) === stair.fromLevel);
@@ -194,10 +305,9 @@ export function applyArchitectureProgram(source: DesignProject, spec: DesignArch
     const placement = findPlacementInRoom(project, sourceRoom, width, depth) || { x: sourceRoom.x + 0.28, y: sourceRoom.y + 0.28 };
     project.plan.objects.push({ id: uid("stairs"), name: `Escalier ${stair.fromLevel + 1}→${stair.toLevel + 1}`, category: "stairs", x: placement.x, y: placement.y, width, depth, height, rotation: 0, materialId: "mat-oak", roomId: sourceRoom.id, level: stair.fromLevel, metadata: { fromLevel: stair.fromLevel, toLevel: stair.toLevel } });
   }
-  // Colonnades monumentales (archetype palais) dans les pièces de circulation.
   for (const colonnadeName of spec.colonnadeRooms) {
     for (const room of project.plan.rooms) {
-      if (norm(room.name).includes(norm(colonnadeName.replace(/\s(d’honneur|supérieure)$/i, ""))) || norm(colonnadeName).includes(norm(room.name))) placeColumns(project, room, 0.62);
+      if (norm(room.name).includes(norm(colonnadeName)) || norm(colonnadeName).includes(norm(room.name))) placeColumns(project, room, 0.62);
     }
   }
   project.preferences.style = spec.style;
@@ -222,11 +332,9 @@ export function applyArchitectureProgram(source: DesignProject, spec: DesignArch
  * Convertit un Design Intent en plan d'actions Design consommable par le
  * pipeline existant (timeline, application pas à pas, composition intérieure).
  */
-export function intentToDesignActions(project: DesignProject, intent: DesignIntentSummary, instruction: string): DesignAiPlanLike {
-  const spec = synthesizeArchitectureProgram(project, intent, instruction);
+export function intentToDesignActions(project: DesignProject, intent: DesignIntentSummary, instruction: string, seed?: number): DesignAiPlanLike {
+  const spec = synthesizeArchitectureProgram(project, intent, instruction, seed);
   const actions: DesignAiAction[] = [];
-  // V8.1 : tout passe par le programme atomique (niveaux, hauteurs, sols par
-  // usage, murs, colonnades, escaliers) — y compris les maisons simples.
   actions.push({ type: "apply_architecture_program", program: spec });
   for (const opening of spec.openings) actions.push({ type: "add_opening", room: opening.room, kind: opening.kind, side: opening.side, width: opening.width, height: opening.height, sill: opening.sill });
   actions.push({ type: "set_architecture_ambience", ambience: intent.ambience });
@@ -239,11 +347,11 @@ export function intentToDesignActions(project: DesignProject, intent: DesignInte
   }
   const archetypeLabel = spec.archetype === "palace" ? "palais" : spec.archetype === "villa" ? "villa" : "maison";
   return {
-    summary: `Programme ${archetypeLabel} dérivé du Design Intent : ${spec.summary}`,
+    summary: `Programme ${archetypeLabel} synthétisé depuis le Design Intent : ${spec.summary}`,
     actions,
     recommendations: [
       `Vocabulaire d'assets Sketchfab aligné : ${Object.values(vocabulary).flat().slice(0, 6).join(", ")}…`,
-      "Aucun asset n'est inventé : si Sketchfab ne renvoie rien de compatible (licence, PBR, style), le fallback procédural premium est conservé et signalé."
+      "Aucun asset n'est inventé : si Sketchfab ne renvoie rien de compatible (licence, PBR, style), un placeholder premium temporaire est généré et le manque est enregistré."
     ],
     spec
   };

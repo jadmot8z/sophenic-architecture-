@@ -125,6 +125,57 @@ export type DesignArchitectureState = {
   referenceAnalyses?: DesignReferenceAnalysis[];
   designIntent?: DesignIntentSummary;
   sketchfabStrategy?: "strict" | "hybrid";
+  /* ---- V8.2 REAL REBUILD ---- */
+  /** Dernier blueprint d'inspiration analysé (source de vérité des reconstructions). */
+  roomBlueprint?: DesignRoomBlueprint;
+  /** Manques d'assets Sketchfab enregistrés (jamais de fallback silencieux). */
+  assetGaps?: DesignAssetGap[];
+  /** Graine de variation : deux demandes identiques peuvent produire deux scènes différentes. */
+  variationSeed?: number;
+};
+
+/** V8.2 — meuble détecté dans une image d'inspiration. */
+export type DesignBlueprintFurnitureItem = { name: string; type?: string; count?: number; notes?: string };
+/** V8.2 — ROOM_BLUEPRINT : compréhension structurée d'un espace par le moteur Vision. */
+export type DesignRoomBlueprint = {
+  id: string;
+  /** Usage de la pièce, ex. "living_room" / "salon". */
+  room: string;
+  style: string;
+  layout: {
+    sofa?: string;
+    coffeeTable?: string;
+    chairs?: string;
+    tvZone?: string;
+    circulation?: string;
+    freeZones?: string[];
+  };
+  architecture: {
+    estimatedWidth?: number;
+    estimatedDepth?: number;
+    ceilingHeight?: number;
+    openings?: Array<{ kind: "door" | "window"; side?: string; width?: number; height?: number }>;
+  };
+  materials: string[];
+  palette: string[];
+  furniture: DesignBlueprintFurnitureItem[];
+  lighting?: string;
+  luxuryLevel?: DesignInteriorFinishLevel;
+  /** Identifiants des images (assets) ayant produit ce blueprint. */
+  sourceImageIds: string[];
+  /** "vision-ai" si le JSON du modèle Vision a été parsé, "derived" sinon, "brain" si enrichi par le Brain. */
+  origin: "vision-ai" | "derived" | "brain";
+  summary: string;
+  createdAt: string;
+};
+/** V8.2 — manque d'asset Sketchfab enregistré (traçabilité, jamais silencieux). */
+export type DesignAssetGap = {
+  id: string;
+  item: string;
+  queries: string[];
+  proposal: string;
+  message: string;
+  createdAt: string;
 };
 
 export type DesignDigitalNode = {
@@ -270,6 +321,7 @@ export type DesignAiAction =
   | { type: "set_architecture_layout"; rooms: Array<{ name: string; usage?: string; width?: number; depth?: number }> }
   | { type: "set_villa_program"; levels: Array<{ name?: string; rooms: Array<{ name: string; usage?: string; width?: number; depth?: number }> }>; style?: string; palette?: string[] }
   | { type: "apply_architecture_program"; program: DesignArchitectureProgramSpec }
+  | { type: "rebuild_room"; room: string; blueprint?: DesignRoomBlueprint; style?: string; keepExisting?: never }
   | { type: "add_stairs_connection"; fromLevel: number; toLevel: number; room?: string; width?: number }
   | { type: "set_architecture_style"; style: string; palette?: string[]; floorMaterial?: string; wallColor?: string }
   | { type: "set_architecture_ambience"; ambience: "day" | "evening" | "soft" }

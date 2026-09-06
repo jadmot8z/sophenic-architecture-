@@ -1,4 +1,5 @@
 import { effectiveAssetVocabulary, profileForArchetype } from "./intent-profiles";
+import { canonicalMaterialText as canonicalMaterial } from "./material-canon";
 import { parseArchitectureBrief } from "./interior-brief";
 import type { DesignArchitectureBrief, DesignIntentArchetype, DesignInteriorFinishLevel, DesignIntentSummary, DesignProject, DesignReferenceAnalysis, DesignReferenceKind } from "./types";
 
@@ -96,32 +97,6 @@ function inferProjectType(text: string): DesignIntentSummary["projectType"] {
   if (/villa/.test(text)) return "villa";
   if (/salon|cuisine|chambre|bathroom|interior|int[eé]rieur/.test(text)) return "interior";
   return "house";
-}
-
-const MATERIAL_CANON: Array<[RegExp, string]> = [
-  [/travertin|travertine/, "Travertin ivoire"],
-  [/marbre|marble|calacatta|carrara/, "Marbre Calacatta clair"],
-  [/noyer|walnut/, "Noyer fumé"],
-  [/ch[eê]ne|oak/, "Chêne naturel"],
-  [/laiton|brass|gold|dor/, "Laiton brossé"],
-  [/velours|velvet/, "Velours ivoire"],
-  [/boucl/, "Bouclé sable"],
-  [/verre|glass/, "Verre extra-clair"],
-  [/pierre calcaire|limestone/, "Pierre calcaire"],
-  [/lin|linen/, "Lin ivoire"],
-  [/cuir|leather/, "Cuir cognac"],
-  [/b[eé]ton|concrete/, "Béton ciré chaud"],
-  [/bronze/, "Bronze patiné"],
-  [/m[eé]tal noir|black metal/, "Métal noir satiné"]
-];
-
-/** Normalise un matériau libre (« walnut clair » → « Noyer fumé ») issu d'une référence IA. */
-function canonicalMaterial(value: string): string | null {
-  const clean = normalize(value).replace(/[.;]/g, "").trim();
-  if (!clean || clean.length > 60) return null;
-  for (const [pattern, name] of MATERIAL_CANON) if (pattern.test(clean)) return name;
-  const pretty = value.trim().replace(/\s+/g, " ");
-  return pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : null;
 }
 
 function asStringArray(value: unknown, limit = 10): string[] {

@@ -3,6 +3,7 @@ import { ensureWebWorkspace, normalizeWebPath, webFileMime } from "./web-workspa
 import { buildArchitectureLayout, buildVillaProgram, findPlacementInRoom, findSmartPlacementInRoom, rebuildArchitectureStructure, syncArchitectureNavigation } from "./architecture";
 import { composeInteriorRoom, optimizeInteriorRoomLayout } from "./interior-composition";
 import { applyArchitectureProgram, intentToDesignActions } from "./architect-program";
+import { rebuildRoomFromBlueprint, rebuildRoomPlan } from "./space-rebuild";
 import { buildArchitectureIntent } from "./design-intent";
 
 const uid = (prefix = "d") => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -106,6 +107,15 @@ export function applyDesignActions(source: DesignProject, actions: DesignAiActio
       // vitrées) seraient écrasés par les ouvertures automatiques.
       project = applyArchitectureProgram(project, action.program);
       architectureStructureChanged = false;
+    } else if (action.type === "rebuild_room") {
+      // V8.2 — SPACE REBUILD ENGINE : suppression totale du mobilier existant
+      // puis NOUVELLE composition (layout, meubles, positions, matériaux,
+      // ambiance) à partir du ROOM_BLUEPRINT et du Design Intent.
+      project = rebuildRoomFromBlueprint(project, action.room, {
+        blueprint: action.blueprint || project.architecture?.roomBlueprint || null,
+        intent: project.architecture?.designIntent || null,
+        seed: project.architecture?.variationSeed
+      }).project;
     } else if (action.type === "set_architecture_layout") {
       project = buildArchitectureLayout(project, action.rooms); architectureStructureChanged = true;
     } else if (action.type === "set_villa_program") {
@@ -273,7 +283,7 @@ function isWholeGenerationPrompt(text: string): boolean {
     || /(?:transforme|transformer|refais|reinvente|réinvente).{0,80}(?:palais|palace)/.test(text);
 }
 
-export function fastDesignCommand(project: DesignProject, input: string): DesignAiPlan | null {
+export function fastDesignCommand(project: DesignProject, input: string, variationSeed?: number): DesignAiPlan | null {
   if (project.domain === "web" && project.webWorkspace?.files.length) return null;
   const text = norm(input);
   const actions: DesignAiAction[] = [];
@@ -282,8 +292,16 @@ export function fastDesignCommand(project: DesignProject, input: string): Design
   const briefDensity: Extract<DesignAiAction, { type: "furnish_room" }>["density"] = intent?.finishLevel === "luxury" || brief?.finishLevel === "luxury" ? "luxury" : brief?.finishLevel === "rich" ? "complete" : "balanced";
   /* V8.1 REAL AI — plus AUCUN template fixe : toute génération globale passe par
      le Program Synthesis Engine, dérivé du Design Intent (Brain/références). */
+  /* V8.2 — SPACE REBUILD en PRIORITÉ : « Transforme mon salon en palace royal »
+     cible la PIÈCE (mot de pièce présent), pas la maison entière — même si le
+     style demandé évoque un palais. La reconstruction de pièce prime donc sur
+     la génération globale. */
+  if (project.domain === "architecture" && /(?:transforme|transformer|refais|reinvente|r[ée]invente|change|remplace|redessine|relooke|m[ée]tamorphose).{0,60}(?:salon|s[ée]jour|chambre|cuisine|salle a manger|salle à manger|suite|bureau|pi[eè]ce|room|living|int[ée]rieur)/.test(text)) {
+    const rebuildPlan = rebuildRoomPlan(project, input, project.architecture?.roomBlueprint || null);
+    if (rebuildPlan) return rebuildPlan;
+  }
   if (project.domain === "architecture" && intent && isWholeGenerationPrompt(text)) {
-    const programPlan = intentToDesignActions(project, intent, input);
+    const programPlan = intentToDesignActions(project, intent, input, variationSeed ?? project.architecture?.variationSeed);
     if (programPlan.actions.length) return { summary: programPlan.summary, actions: programPlan.actions, recommendations: programPlan.recommendations };
   }
   if (project.domain === "architecture") { const layout = requestedHouseRooms(text); if (layout) actions.push(layout); }
@@ -328,7 +346,7 @@ export function sanitizeAiPlan(value: unknown): DesignAiPlan | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const rawActions = Array.isArray(row.actions) ? row.actions : [];
-  const allowed = new Set(["resize_room", "add_room", "add_object", "set_architecture_layout", "set_villa_program", "apply_architecture_program", "add_stairs_connection", "set_architecture_style", "set_architecture_ambience", "furnish_room", "optimize_room_layout", "rename_room", "clear_room", "remove_object", "move_object", "add_opening", "set_wall_height", "set_ceiling_height", "set_material", "set_room_color", "set_orientation", "add_variant", "add_digital_node", "set_design_system", "set_product_dimensions", "write_web_file", "note"]);
+  const allowed = new Set(["resize_room", "add_room", "add_object", "set_architecture_layout", "set_villa_program", "apply_architecture_program", "rebuild_room", "add_stairs_connection", "set_architecture_style", "set_architecture_ambience", "furnish_room", "optimize_room_layout", "rename_room", "clear_room", "remove_object", "move_object", "add_opening", "set_wall_height", "set_ceiling_height", "set_material", "set_room_color", "set_orientation", "add_variant", "add_digital_node", "set_design_system", "set_product_dimensions", "write_web_file", "note"]);
   const actions = rawActions.filter((entry): entry is DesignAiAction => Boolean(entry && typeof entry === "object" && !Array.isArray(entry) && allowed.has(String((entry as Record<string, unknown>).type)))).slice(0, 24);
   return { summary: typeof row.summary === "string" ? row.summary.slice(0, 2000) : "Proposition SOPHENIC Design", actions, recommendations: Array.isArray(row.recommendations) ? row.recommendations.filter((item): item is string => typeof item === "string").slice(0, 10) : [] };
 }
