@@ -1,0 +1,24 @@
+SOPHENIC 10.2.0 — PLUGINS + GRANDE MEMOIRE + HISTORIQUE
+
+Lancement :
+  npm install
+  npm run sophenic:start
+
+Nouveautés principales :
+- Plugins : GitHub, Vercel, Supabase, Cloudflare, Firebase, Gmail, Drive,
+  Calendar, Notion, Stripe, Shopify, WordPress, PostgreSQL, MySQL, MongoDB.
+- Paramètres réorganisés : réglages internes de SOPHENIC et capacités de l'agent.
+- Grande mémoire locale jusqu'à 20 000 souvenirs.
+- Historique persistant : Nouvelle session archive le chat courant.
+- Bibliothèque des images/fichiers/projets/exports.
+- Planification de tâches.
+- SOPHENIC Code peut utiliser les plugins configurés sans exposer les secrets au prompt.
+
+GitHub :
+- Pour le bouton Autoriser GitHub, active Enable Device Flow dans ton OAuth App.
+- Le champ Token manuel accepte un PAT github_pat_... ou ghp_...
+- Un Client Secret OAuth n'est PAS un PAT et sera refusé.
+- Si github.com demande une vérification de l'appareil par e-mail, cet e-mail est
+  envoyé par GitHub, pas par SOPHENIC.
+
+Consulte PLUGIN-KEYS-OFFICIAL-URLS.md pour tous les portails officiels.

@@ -1,0 +1,7 @@
+fastapi>=0.116,<1
+uvicorn[standard]>=0.35,<1
+pydantic-settings>=2.10,<3
+numpy>=2.0,<3
+faster-whisper>=1.1,<2
+transformers==4.48.3
+voxcpm==2.0.3

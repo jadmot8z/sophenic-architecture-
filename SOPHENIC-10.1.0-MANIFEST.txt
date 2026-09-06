@@ -1,0 +1,32 @@
+SOPHENIC 10.1.0 — MANIFESTE DE LIVRAISON WEB CREATOR PRO
+
+Fichiers dans la source livrée (hors caches/builds/git): 260
+Racine archive: sophenic_Oauth
+
+SHA-256 des fichiers critiques:
+c8206bf54949a229f5b828919728064b82dba20b1774dc1a11447387f9aa6f8e  package.json
+69cd73fa9268f5ef77322648ea81300d9c410f94840b6af1e4d25e9e7b68884f  package-lock.json
+fe48a4a96874cc28773ee0f36bb720064dbce2848a7d3492ecc8bf0f810ffd84  electron/runtime/sophenic-brain.ts
+3b6924224d208ab0a492d68c831482e57d528c70c043762dabf851f15781b7b4  electron/runtime/code-engine/autonomous-runtime.ts
+f8be04dc81e5faaab2b24941e73055a7b6ec0f85145a8eebb3dbaa06a416cf83  electron/runtime/code-engine/tool-executor.ts
+fdbf658118af118ae023111e19e046a0c1fa3a1817da77d2dac72eb2ba136e23  electron/runtime/code-engine/website-quality.ts
+e2ec0908a7ec604652b16ec8ca84af3b7f3fe9ce1bab905c9f1d5111143774eb  electron/runtime/code-engine/connectors/playwright-agent.ts
+17fa0fc97e9488409288caff92809c8e6fe496a38352aec484ca7a69f75aa518  electron/runtime/code-engine/connectors/vercel.ts
+745fdae8312d7863f50dd908c4d7f99174fc5e6d4041077ffacc347176a29593  electron/runtime/code-engine/connectors/github.ts
+a3ae530b4027a7b3cdeae7198701798168787b6994d95802e782664eefcc4212  src/components/agent/local-agent-workspace.tsx
+fe4d782cb333e04dd912de3aa6d4a235db94fb0e0f69c9e50e1d9c770f622840  electron/runtime/developer-oauth.ts
+00f747fca22330a7c3f807cb06b9b5d30b504c7ca7e140108d6f2a78fc8e9462  scripts/test-sophenic.mjs
+656eaeeca0701466f31af8dd5aa9382f4e5194b58eb9105e4308bde569289c26  scripts/verify-source.mjs
+a97831643123dca9e58b1f34b98b239fdb8fb3bc657fd23f998183b7afeaea20  scripts/ensure-electron.mjs
+
+Validations effectuées avant livraison:
+- scripts/test-sophenic.mjs : OK
+- scripts/verify-source.mjs : OK
+- parsing/transpilation TypeScript/TSX : 155 fichiers OK
+- test Web Quality Gate contre une page HTML brute : refusée (score 7/80)
+- recherche de PAT GitHub/Vercel plausibles dans les sources : aucun secret réel trouvé
+
+Important:
+- Le ZIP ne contient pas node_modules ni les caches de build.
+- Le build npm complet/Electron Windows doit être exécuté après npm install sur la machine cible.
+- La qualité finale dépend aussi du modèle IA/API configuré, mais SOPHENIC 10.1.0 impose désormais des Quality Gates avant livraison/déploiement Web.

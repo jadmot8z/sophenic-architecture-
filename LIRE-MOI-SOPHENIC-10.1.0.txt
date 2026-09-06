@@ -1,0 +1,55 @@
+SOPHENIC 10.1.0 — WEB CREATOR PRO
+==================================
+
+DEMARRAGE
+1. Extraire le ZIP complet.
+2. Ouvrir le dossier sophenic_Oauth dans VS Code.
+3. Ouvrir le terminal integre VS Code.
+4. Executer : npm install
+5. Executer : npm run sophenic:start
+
+VERIFIER LA VERSION
+node -p "require('./package.json').version"
+Resultat attendu : 10.1.0
+
+CE QUI CHANGE POUR SOPHENIC CODE
+- Creation de site = mode qualite Deep automatiquement en mode Auto.
+- Brief court = SOPHENIC doit prendre lui-meme de bonnes decisions de design au lieu de livrer un prototype minimal.
+- Architecture multi-fichiers privilegiee pour les vrais sites.
+- Responsive mobile/tablette/desktop obligatoire pour les creations Web.
+- Build/tests/typecheck avant livraison.
+- Web Quality Gate source : un site HTML brut ou trop pauvre est refuse.
+- Audit live Playwright desktop + mobile avant fin d'un deploiement Vercel.
+- Capture finale du site deploye.
+- Si l'audit echoue, SOPHENIC doit corriger puis redeployer sur le meme projet.
+
+EXEMPLE DE DEMANDE
+"Tu vois le projet Vercel auquel tu peux acceder. Cree un site de voyage premium, responsive et complet puis mets-le sur ce projet Vercel."
+
+SOPHENIC doit alors :
+1. Identifier le bon projet Vercel.
+2. Inspecter le workspace.
+3. Planifier design + contenu + architecture.
+4. Creer le site complet.
+5. Verifier typecheck/tests/build.
+6. Passer website.audit.
+7. Lier le bon projet Vercel et deployer.
+8. Ouvrir l'URL live, auditer desktop/mobile et prendre une capture.
+9. Corriger si le resultat est trop pauvre ou casse.
+10. Livrer seulement l'URL verifiee.
+
+GITHUB
+- Recommande : activer "Enable Device Flow" dans l'OAuth App GitHub.
+- Plugins > GitHub ouvre le flux officiel GitHub Device Flow.
+- Aucun Client Secret GitHub n'est requis pour ce flux Desktop.
+- Le champ PAT manuel accepte uniquement github_pat_... ou ghp_...
+
+VERCEL
+- Plugins > Vercel ouvre les outils Vercel.
+- Le token personnel vcp_... est valide contre l'API Vercel puis chiffre avec safeStorage.
+- SOPHENIC peut lister/inspecter/lier un projet Vercel avant deployment.
+
+SECURITE
+- Ne partage jamais tes tokens GitHub/Vercel.
+- Aucun token reel n'est inclus dans ce ZIP.
+- Les tokens enregistres dans Desktop ne sont pas reaffiches en clair.

@@ -1,0 +1,21 @@
+SOPHENIC 10.3.0 — EXPERIENCE + VOICE
+
+LANCER L'APP
+1. Ouvrir le dossier sophenic_Oauth dans VS Code.
+2. npm install
+3. npm run sophenic:start
+
+PLUGINS
+Le Plugin Hub n'affiche plus de champs de clés API. Il présente uniquement les services, leur état et Connecter/Déconnecter. Les secrets déjà présents dans le coffre SOPHENIC restent conservés.
+
+PLANIFICATION
+Les tâches sont exécutées par le runtime Desktop lorsqu'il est actif. Les tâches quotidiennes se reprogramment automatiquement. Une notification Windows et une notification SOPHENIC sont affichées après l'exécution.
+
+VOICE / VOIX
+Le code du service se trouve dans voice-service/.
+Développement sans GPU : copier voice-service/.env.example vers voice-service/.env et mettre VOICE_MOCK_MODE=true.
+GPU NVIDIA : définir VOICE_SERVICE_KEY, configurer la même valeur dans SOPHENIC_VOICE_SERVICE_KEY côté runtime, puis lancer `docker compose up -d --build` dans voice-service/.
+Le service reste séparé du LLM actuel : si la voix tombe, le texte continue.
+
+IMPORTANT
+VoxCPM2 n'est pas inclus dans ce ZIP (poids du modèle). Il est téléchargé par le service au premier lancement GPU. Aucun quota fournisseur de caractères/minutes n'est imposé par l'architecture auto-hébergée ; les limites pratiques sont celles de ton serveur GPU.

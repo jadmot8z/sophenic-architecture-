@@ -1,0 +1,25 @@
+services:
+  sophenic-voice-engine:
+    build:
+      context: ..
+      dockerfile: voice_engine/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"
+    env_file:
+      - .env
+    environment:
+      SOPHENIC_VOICE_DEVICE: cuda
+      SOPHENIC_VOICE_COMPUTE_TYPE: float16
+    volumes:
+      - ./voices:/app/voices:ro
+      - sophenic-voice-models:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+volumes:
+  sophenic-voice-models:

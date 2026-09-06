@@ -1,0 +1,21 @@
+SOPHENIC 23 - VALIDATION DU CORRECTIF CONNECTEURS
+==================================================
+
+PASS - package.json JSON valide, route Electron /desktop/agent correcte.
+PASS - syntaxe TypeScript/TSX vérifiée sur les fichiers modifiés (TypeScript 5.8 transpile/parse).
+PASS - Python oauth-broker: py_compile sur config.py, providers.py, main.py.
+PASS - scripts/test-sophenic.mjs.
+PASS - broker OAuth: création de session testée pour 11 providers avec credentials factices, sans appeler les fournisseurs externes.
+PASS - Shopify: provider dynamique par boutique construit et validé.
+PASS - scan du paquet: aucun token utilisateur connu / secret réel détecté; aucun fichier .env rempli inclus.
+PASS - ZIP final: test CRC OK.
+
+LIMITATION DE L'ARCHIVE SOURCE RECUE
+------------------------------------
+Le ZIP source allégé a été créé en excluant le dossier build/ (ainsi que node_modules, dist, .next, etc.).
+Le dossier build/ contient les assets NSIS/intro nécessaires à npm run build / build:installer mais n'est pas requis pour npm run sophenic:start.
+Pour le projet local existant, le ZIP PATCH doit être extrait par-dessus le dossier original afin de conserver build/.
+
+TEST REEL OAUTH
+---------------
+Le code broker et Desktop est prêt pour le mode multi-utilisateur. Un test réel jusqu'à la page de consentement de chaque fournisseur nécessite le provisionnement unique des applications OAuth de l'éditeur et un broker HTTPS public. Aucun secret fournisseur n'est embarqué dans Electron.

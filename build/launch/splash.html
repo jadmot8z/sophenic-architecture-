@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SOPHENIC</title>
+  <style>
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#050609;overflow:hidden}
+    body{display:grid;place-items:center;font-family:Inter,Segoe UI,Arial,sans-serif;color:#fff}
+    video{width:100%;height:100%;object-fit:cover;background:#050609}
+    .fallback{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;background:radial-gradient(circle at 50% 45%,#171b29 0,#090b11 40%,#050609 72%);opacity:0;transition:opacity .25s}
+    .fallback strong{font-size:44px;letter-spacing:.18em}
+  </style>
+</head>
+<body>
+  <video id="intro" autoplay muted playsinline preload="auto"><source src="intro.mp4" type="video/mp4" /></video>
+  <div class="fallback" id="fallback"><strong>SOPHENIC</strong></div>
+  <script>
+    const video=document.getElementById('intro'); const fallback=document.getElementById('fallback');
+    const finish=()=>{ document.body.dataset.finished='true'; };
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',()=>{ fallback.style.opacity='1'; setTimeout(finish,900); },{once:true});
+    video.play().catch(()=>{ fallback.style.opacity='1'; setTimeout(finish,900); });
+  </script>
+</body>
+</html>
