@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Armchair, Box, Building2, Check, ChevronDown, Code2, Copy, Crosshair, DoorOpen, Download,
-  FileCode2, Files, FlaskConical, FolderOpen, Globe2, History, Layers3, Loader2, MessageSquareText, Monitor,
+  FileCode2, Files, FlaskConical, FolderOpen, History, Layers3, Loader2, MessageSquareText, Monitor,
   MousePointer2, Package, Palette, PanelLeft, Plus, Redo2, RotateCcw, Ruler, Save, Send, Smartphone,
   Sparkles, Square, Footprints, Tablet, Trash2, Undo2, Upload, WandSparkles, X, Sun, Moon, ScanEye
 } from "lucide-react";
@@ -46,9 +46,8 @@ type Drawer = "none" | "files" | "versions" | "simulations" | "materials" | "pro
 const uid = (prefix = "design") => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const copy = <T,>(value: T): T => structuredClone(value);
 
-const projectKinds: Array<{ domain: DesignDomain; label: string; eyebrow: string; description: string; icon: typeof Globe2 }> = [
+const projectKinds: Array<{ domain: DesignDomain; label: string; eyebrow: string; description: string; icon: typeof Palette }> = [
   { domain: "webdesign", label: "Web Design", eyebrow: "SITES · BRAND · CONVERSION", description: "L'agence créative IA : SOPHENIC conçoit le design complet du site (blueprint original ou template re-personnalisé) avant toute ligne de code.", icon: Palette },
-  { domain: "web", label: "Design Web", eyebrow: "SITES · APPS · UI", description: "Importe un site, affiche-le en direct et demande à Sophenic de le redesign ou de modifier ses fichiers.", icon: Globe2 },
   { domain: "architecture", label: "Architecture", eyebrow: "MAISON · ESPACES", description: "Commence par une maison vide, tourne autour à 360°, entre dans chaque pièce puis meuble-la avec Sophenic.", icon: Building2 },
   { domain: "product", label: "Design 3D", eyebrow: "OBJETS · MOBILIER", description: "Conçois un objet paramétrique, change ses dimensions et matériaux, explore des variantes en 3D.", icon: Box }
 ];

@@ -113,7 +113,8 @@ assert(ai.includes('provider: "sophenic"') && ai.includes('model: "auto"') && ai
 
 // Keep the approved three-project UX and Web/Product modules.
 assert(workspace.includes("function DesignHome") && workspace.includes("Créer un projet"), "Page d’entrée Design minimaliste absente.");
-for (const label of ["Design Web", "Architecture", "Design 3D"]) assert(workspace.includes(label), `Choix de projet manquant: ${label}`);
+for (const label of ["Web Design", "Architecture", "Design 3D"]) assert(workspace.includes(label), `Choix de projet manquant: ${label}`);
+assert(!workspace.includes('domain: "web", label: "Design Web"'), "L'ancienne carte de création « Design Web » doit avoir été retirée (remplacée par Web Design).");
 assert(workspace.includes("<DesignWebPreview") && workspace.includes("<DesignCanvas2D") && workspace.includes("<DesignViewport3D") && workspace.includes("<ArchitectureViewport3D") && workspace.includes("<SophenicPanel"), "Canvas principaux/chat Design non reliés.");
 assert(webPreview.includes("<iframe") && webPreview.includes("srcDoc") && webPreview.includes("sandbox="), "Preview Web live/sandbox absente.");
 assert(webWorkspace.includes("buildWebPreview") && webWorkspace.includes("sophenic-design-preview"), "Reconstruction réelle du site Web incomplète.");
