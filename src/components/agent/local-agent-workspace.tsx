@@ -23,6 +23,8 @@ import {
   Image as ImageIcon,
   KeyRound,
   Loader2,
+  Paperclip,
+  FileText,
   MapPin,
   MessageSquare,
   MessageSquarePlus,
@@ -84,7 +86,8 @@ type QuestionData = {
 };
 type ModelFallbackNotice = { fromProvider: string; fromModel: string; toProvider: string; toModel: string; reason?: string };
 type ModelRun = { provider: string; model: string; requestedProvider?: string; requestedModel?: string; fallback?: ModelFallbackNotice; agents?: Array<{ role: string; provider: string; model: string }> };
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; error?: boolean; images?: ImageItem[]; location?: LocationItem; places?: PlaceItem[]; question?: QuestionData; run?: ModelRun; thinking?: ThinkingTrace };
+type UserAttachment = { id: string; name: string; mime: string; size: number; dataUrl: string };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; error?: boolean; images?: ImageItem[]; location?: LocationItem; places?: PlaceItem[]; question?: QuestionData; run?: ModelRun; thinking?: ThinkingTrace; attachments?: UserAttachment[] };
 type StoredConversationRecord = { id: string; title: string; mode: "chat" | "code" | "image"; createdAt: string; updatedAt: string; messages: ChatMessage[]; workspace?: string };
 
 function normalizeChatMessages(value: unknown): ChatMessage[] {
@@ -99,6 +102,33 @@ function normalizeChatMessages(value: unknown): ChatMessage[] {
     return [{ ...row, id, role, content } as ChatMessage];
   });
 }
+const TEXT_ATTACHMENT_MIME = /^(text\/|application\/json|application\/xml|application\/javascript|application\/typescript|application\/x-yaml)/i;
+const TEXT_ATTACHMENT_EXTENSION = /\.(txt|md|markdown|json|csv|tsv|ya?ml|toml|ini|cfg|conf|env|log|html?|css|scss|jsx?|tsx?|py|java|kt|go|rs|c|h|cpp|hpp|cs|php|rb|swift|sql|sh|ps1|bat|lua|vue|svelte|dart)$/i;
+const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const ATTACHMENT_MAX_COUNT = 6;
+
+function attachmentIsImage(attachment: UserAttachment): boolean { return attachment.mime.startsWith("image/"); }
+function attachmentIsTextual(attachment: UserAttachment): boolean {
+  return TEXT_ATTACHMENT_MIME.test(attachment.mime) || (!attachment.mime && TEXT_ATTACHMENT_EXTENSION.test(attachment.name)) || (attachment.mime === "application/octet-stream" && TEXT_ATTACHMENT_EXTENSION.test(attachment.name));
+}
+function decodeAttachmentText(attachment: UserAttachment, cap = 12_000): string {
+  try {
+    const base64 = attachment.dataUrl.includes(",") ? attachment.dataUrl.slice(attachment.dataUrl.indexOf(",") + 1) : "";
+    const decoded = base64 ? decodeURIComponent(escape(atob(base64))) : "";
+    return decoded.length > cap ? `${decoded.slice(0, cap)}\n… [contenu tronqué : ${decoded.length.toLocaleString("fr-FR")} caractères au total]` : decoded;
+  } catch { return "[contenu binaire non lisible]"; }
+}
+/** Bloc de contexte texte injecté dans les moteurs qui ne voient pas les images (Code, génération d'image). */
+function buildAttachmentContext(attachments: UserAttachment[]): string {
+  if (!attachments.length) return "";
+  const lines = attachments.map((attachment) => {
+    if (attachmentIsTextual(attachment)) return `— ${attachment.name} (${attachment.mime || "texte"}, ${(attachment.size / 1024).toFixed(1)} Ko) :\n${decodeAttachmentText(attachment)}`;
+    const kind = attachmentIsImage(attachment) ? "image" : "document";
+    return `— ${attachment.name} (${kind} ${attachment.mime || "inconnu"}, ${(attachment.size / 1024).toFixed(1)} Ko) : pièce jointe ${kind} non lisible dans ce moteur, demande à l'utilisateur de passer par le mode Chat pour l'analyse visuelle si nécessaire.`;
+  });
+  return `\n\nPIÈCES JOINTES PAR L'UTILISATEUR (${attachments.length}) :\n${lines.join("\n\n")}`;
+}
+
 type PlannerNotice = { id: string; title: string; ok: boolean; message: string; detail?: string; completedAt: string };
 
 type IntegrationPermission = {
@@ -749,6 +779,8 @@ export function LocalAgentWorkspace() {
   const [approval, setApproval] = useState<ApprovalRequest | null>(null);
   const [credentialRequest, setCredentialRequest] = useState<CredentialRequest | null>(null);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [attachments, setAttachments] = useState<UserAttachment[]>([]);
+  const attachmentInput = useRef<HTMLInputElement | null>(null);
   const currentRequest = useRef("");
   const currentAssistant = useRef("");
   const currentCodeRequest = useRef("");
@@ -832,11 +864,14 @@ export function LocalAgentWorkspace() {
   const saveConversationSnapshot = useCallback(async (targetMode: "chat" | "code" | "image", messages: ChatMessage[]) => {
     if (!desktop?.workspace || !messages.length) return;
     const title = messages.find((message) => message.role === "user")?.content.trim().slice(0, 80) || (targetMode === "code" ? "Session Code" : targetMode === "image" ? "Création Image" : "Conversation");
+    const storedMessages = messages.map((message) => message.attachments?.length
+      ? { ...message, attachments: message.attachments.map(({ id, name, mime, size }) => ({ id, name, mime, size, dataUrl: "" })) }
+      : message);
     await desktop.workspace.historySave({
       id: localConversationIds.current[targetMode],
       title,
       mode: targetMode,
-      messages,
+      messages: storedMessages,
       ...(targetMode === "code" && workspace ? { workspace } : {})
     }).catch(() => undefined);
     const recent = await desktop.workspace.historyList().catch(() => [] as StoredConversationRecord[]);
@@ -1944,7 +1979,8 @@ ${displayPrompt ?? prompt}`;
     }
   };
 
-  const sendNativeCodePrompt = async (prompt: string, route?: IntentDecision) => {
+  const sendNativeCodePrompt = async (prompt: string, route?: IntentDecision, displayAttachments?: UserAttachment[]) => {
+    const displayedPrompt = displayAttachments?.length ? prompt.split("\n\nPIÈCES JOINTES PAR L'UTILISATEUR")[0] : prompt;
     if (!desktop) return;
     const resolvedWorkspace = await resolveCodeWorkspace(prompt);
     const activeWorkspace = resolvedWorkspace.workspace;
@@ -1964,7 +2000,7 @@ ${displayPrompt ?? prompt}`;
       ? `CONTEXTE RÉCENT DE LA SESSION SOPHENIC CODE (visible par l'utilisateur, à conserver pour les références comme « ce projet », « cette URL », « comme avant ») :\n${recentConversation}\n\nDEMANDE ACTUELLE À EXÉCUTER :\n${prompt}`
       : prompt;
 
-    appendMessage("code", { id: uid(), role: "user", content: prompt });
+    appendMessage("code", { id: uid(), role: "user", content: displayedPrompt, ...(displayAttachments?.length ? { attachments: displayAttachments } : {}) });
     appendMessage("code", {
       id: assistantId,
       role: "assistant",
@@ -2020,22 +2056,50 @@ ${displayPrompt ?? prompt}`;
     }
   };
 
+  const takeAttachments = (): UserAttachment[] => {
+    const taken = attachments.slice(0, ATTACHMENT_MAX_COUNT);
+    setAttachments([]);
+    if (attachmentInput.current) attachmentInput.current.value = "";
+    return taken;
+  };
+  const readAttachmentFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const accepted: UserAttachment[] = [];
+    for (const file of Array.from(files).slice(0, ATTACHMENT_MAX_COUNT)) {
+      if (file.size > ATTACHMENT_MAX_BYTES) { setError(`« ${file.name} » dépasse 5 Mo et n’a pas été joint.`); continue; }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      }).catch(() => "");
+      if (!dataUrl) { setError(`« ${file.name} » n’a pas pu être lu.`); continue; }
+      accepted.push({ id: uid(), name: file.name, mime: file.type || "", size: file.size, dataUrl });
+    }
+    if (accepted.length) setError("");
+    setAttachments((current) => [...current, ...accepted].slice(0, ATTACHMENT_MAX_COUNT));
+  };
+
   const sendChat = async (override?: string, force = false) => {
     if (!desktop || (sending && !force) || boot !== "ready") return;
-    const prompt = (override ?? input).trim();
-    if (!prompt) return;
+    const prompt = (override ?? input).trim() || "";
+    const outgoingAttachments = override === undefined ? takeAttachments() : [];
+    if (!prompt && !outgoingAttachments.length) return;
     if (override === undefined) setInput("");
     if (textArea.current) textArea.current.style.height = "auto";
-    await desktop.runtime.rememberLanguage(prompt).catch(() => null);
+    if (prompt) await desktop.runtime.rememberLanguage(prompt).catch(() => null);
 
-    if (imageGenerationRequest(prompt)) {
+    // Des pièces jointes (images/fichiers) imposent l'analyse par le modèle :
+    // les routeurs deterministes (génération d'image, recherche de lieu…) ne
+    // s'appliquent pas à une demande qui porte des fichiers à analyser.
+    if (!outgoingAttachments.length && imageGenerationRequest(prompt)) {
       appendMessage("image", { id: uid(), role: "user", content: prompt });
       setMode("image");
       await generateImage(prompt);
       return;
     }
 
-    if (wantsCurrentLocation(prompt)) {
+    if (!outgoingAttachments.length && wantsCurrentLocation(prompt)) {
       const permission = integrations.find((item) => item.id === "location");
       if (!permission?.enabled) {
         setError("Active « Localisation » dans Plugins pour autoriser Sophenic à lire ta position Windows uniquement à ta demande.");
@@ -2064,7 +2128,7 @@ ${displayPrompt ?? prompt}`;
     }
 
     const directPlaceQuery = placeSearchQuery(prompt);
-    if (directPlaceQuery) {
+    if (!outgoingAttachments.length && directPlaceQuery) {
       appendMessage("chat", { id: uid(), role: "user", content: prompt });
       setSending(true); setError("");
       try {
@@ -2103,7 +2167,7 @@ ${displayPrompt ?? prompt}`;
       return;
     }
 
-    if (explicitReferenceImageRequest(prompt)) {
+    if (!outgoingAttachments.length && explicitReferenceImageRequest(prompt)) {
       appendMessage("chat", { id: uid(), role: "user", content: prompt });
       setSending(true); setError("");
       try {
@@ -2129,7 +2193,7 @@ ${displayPrompt ?? prompt}`;
     // Priority local action router: deterministic Windows/Spotify/filesystem
     // commands are executed before Intent Router, Hermes, Code, or any LLM.
     const directAction = routeAction(prompt);
-    if (directAction) {
+    if (!outgoingAttachments.length && directAction) {
       setLastRoute({ intent: "agent_pc", label: directAction.label, requiresHermes: false, purpose: "pc", confidence: 1, reason: "Action Router prioritaire" });
       appendMessage("chat", { id: uid(), role: "user", content: prompt });
       setSending(true); setError("");
@@ -2171,7 +2235,7 @@ ${displayPrompt ?? prompt}`;
       if (!permission.connected) { setError("Google Workspace est autorisé mais pas encore connecté. Clique sur « Connecter Google »."); setMode("plugins"); return; }
     }
 
-    if (route.intent === "agent_pc") {
+    if (route.intent === "agent_pc" && !outgoingAttachments.length) {
       const permission = integrations.find((item) => item.id === "computer_use");
       if (!permission?.enabled) {
         if (permission) setPermissionItem(permission); else setMode("plugins");
@@ -2180,7 +2244,7 @@ ${displayPrompt ?? prompt}`;
       }
       const nativeAction = await desktop.runtime.tryNativePcAction(prompt).catch(() => ({ handled: false, message: "" }));
       if (nativeAction.handled) {
-        appendMessage("chat", { id: uid(), role: "user", content: prompt });
+        appendMessage("chat", { id: uid(), role: "user", content: prompt || "(pièces jointes)", ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {}) });
         appendMessage("chat", { id: uid(), role: "assistant", content: nativeAction.message || "Action Windows exécutée." });
         setError("");
         return;
@@ -2191,16 +2255,16 @@ ${displayPrompt ?? prompt}`;
 
     if (route.intent === "project" || route.intent === "code") {
       setMode("code");
-      await sendNativeCodePrompt(prompt, route);
+      await sendNativeCodePrompt(prompt + buildAttachmentContext(outgoingAttachments), route, outgoingAttachments);
       return;
     }
 
-    if ((route.requiresHermes && route.intent !== "research") || google) {
+    if (((route.requiresHermes && route.intent !== "research") || google) && !outgoingAttachments.length) {
       await sendHermesPrompt("chat", prompt, "assistant", selectedModel, selectedProvider, route);
       return;
     }
 
-    const userMessage: ChatMessage = { id: uid(), role: "user", content: prompt };
+    const userMessage: ChatMessage = { id: uid(), role: "user", content: prompt || "(pièces jointes)", ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {}) };
     const assistantId = uid();
     const requestId = uid();
     const placeQuery = placeSearchQuery(prompt);
@@ -2231,7 +2295,18 @@ ${displayPrompt ?? prompt}`;
         const exactPlaceImageQuery = `${places[0].name} ${places[0].address}`;
         imagePromise = desktop.runtime.searchReferenceImages(exactPlaceImageQuery).catch(() => [] as ImageItem[]);
       }
-      const modelHistory = history.map((message) => ({ role: message.role, content: message.content }));
+      const modelHistory = history.map((message, index) => {
+        // Seul le dernier message utilisateur porte les payloads image/document
+        // (la vision porte sur la demande actuelle, pas sur l'historique ancien).
+        const isLatest = index === history.length - 1 && message.role === "user";
+        const messageAttachments = isLatest ? outgoingAttachments : [];
+        const images = messageAttachments.filter(attachmentIsImage).map((attachment) => attachment.dataUrl);
+        const files = messageAttachments.filter((attachment) => !attachmentIsImage(attachment) && !attachmentIsTextual(attachment)).map((attachment) => ({ name: attachment.name, mime: attachment.mime, dataUrl: attachment.dataUrl }));
+        const textFiles = messageAttachments.filter(attachmentIsTextual);
+        const attachmentNote = [...message.attachments?.map((attachment) => `[pièce jointe précédente : ${attachment.name}]`) || [], ...textFiles.map((attachment) => `FICHIER JOINT « ${attachment.name} » (${attachment.mime || "texte"}, ${(attachment.size / 1024).toFixed(1)} Ko) :\n${decodeAttachmentText(attachment)}`)].join("\n\n");
+        const content = attachmentNote ? `${message.content}\n\n${attachmentNote}` : message.content;
+        return { role: message.role, content, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}) };
+      });
       if (places.length) {
         const grounded = places.slice(0, 5).map((item, index) => `${index + 1}. ${item.name} — ${item.address}${item.phone ? ` — ${item.phone}` : ""}${item.website ? ` — ${item.website}` : ""}`).join("\n");
         modelHistory[modelHistory.length - 1] = { role: "user", content: `${prompt}\n\nRÉSULTATS DE LOCALISATION RÉELS FOURNIS PAR L'OUTIL SOPHENIC :\n${grounded}\n\nUtilise ces résultats pour répondre. N'invente pas une adresse absente des résultats.` };
@@ -2303,13 +2378,15 @@ ${displayPrompt ?? prompt}`;
 
   const sendCode = async (override?: string) => {
     if (sending) return;
-    const userPrompt = (override ?? input).trim();
-    if (!userPrompt) return;
+    const rawPrompt = (override ?? input).trim();
+    const outgoingAttachments = override === undefined ? takeAttachments() : [];
+    if (!rawPrompt && !outgoingAttachments.length) return;
+    const userPrompt = rawPrompt || "(analyse les pièces jointes)";
     if (override === undefined) setInput("");
 
     const resumeRequested = /^(?:continue|continue ton travail|continue ton travaille|reprends|reprend|reprise|poursuis|poursuit)(?:\s|[.!?])*$/i.test(normalize(userPrompt));
     const checkpoint = resumeRequested ? codeCheckpoint.current : null;
-    let effectivePrompt = userPrompt;
+    let effectivePrompt = userPrompt + buildAttachmentContext(outgoingAttachments);
     if (checkpoint) {
       if (checkpoint.workspace) setWorkspace(checkpoint.workspace);
       if (checkpoint.workspaceKind) setWorkspaceKind(checkpoint.workspaceKind);
@@ -2320,7 +2397,7 @@ ${displayPrompt ?? prompt}`;
 
     const route: IntentDecision = { intent: "code", label: checkpoint ? "Reprise Sophenic Code" : "Sophenic Code", requiresHermes: false, purpose: "code", confidence: 1, reason: checkpoint ? "Reprise du checkpoint persistant." : "Mode Code sélectionné explicitement." };
     setLastRoute(route);
-    await sendNativeCodePrompt(effectivePrompt, route);
+    await sendNativeCodePrompt(effectivePrompt, route, checkpoint ? undefined : outgoingAttachments);
   };
 
   const generateImage = async (originalPrompt: string, style?: string, format?: string) => {
@@ -2354,16 +2431,19 @@ ${displayPrompt ?? prompt}`;
 
   const sendImage = async () => {
     if (sending) return;
-    const prompt = input.trim();
-    if (!prompt) return;
+    const rawPrompt = input.trim();
+    const outgoingAttachments = takeAttachments();
+    if (!rawPrompt && !outgoingAttachments.length) return;
+    const referenceNote = outgoingAttachments.length ? `\n\n(Références visuelles jointes par l'utilisateur : ${outgoingAttachments.map((attachment) => attachment.name).join(", ")} — inspires-ti de leur style/sujet.)` : "";
+    const prompt = rawPrompt || "Crée une image inspirée des références visuelles jointes.";
     await desktop?.runtime.rememberLanguage(prompt).catch(() => null);
-    setInput(""); appendMessage("image", { id: uid(), role: "user", content: prompt });
+    setInput(""); appendMessage("image", { id: uid(), role: "user", content: prompt, ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {}) });
     if (prompt.split(/\s+/).length < 7) {
-      setPendingImage({ originalPrompt: prompt });
+      setPendingImage({ originalPrompt: prompt + referenceNote });
       appendMessage("image", { id: uid(), role: "assistant", content: "Je peux préciser le rendu avant de générer.", question: { index: 1, total: 2, question: "Quel style veux-tu ?", options: ["Photo réaliste", "Illustration", "3D", "Anime"], allowOther: true, kind: "image-style" } });
       return;
     }
-    await generateImage(prompt);
+    await generateImage(prompt + referenceNote);
   };
 
   const answerQuestion = async (message: ChatMessage, answer: string) => {
@@ -2545,16 +2625,16 @@ ${displayPrompt ?? prompt}`;
       : mode === "history" ? <HistoryCenter onOpen={(record) => openStoredConversation(record as unknown as StoredConversationRecord)} />
       : mode === "library" ? <LibraryCenter />
       : mode === "planner" ? <PlannerCenter />
-      : <div className="flex min-h-0 flex-1"><section className="min-h-0 min-w-0 flex-1 overflow-y-auto"><div className={cn("mx-auto w-full px-4 pb-44 pt-5 sm:px-6", mode === "code" ? "max-w-4xl" : "max-w-3xl", !currentMessages.length && "flex min-h-full items-center justify-center pb-28")}>{!currentMessages.length ? <div className="mb-14 w-full text-center">{mode === "code" ? <div className="mx-auto grid size-20 place-items-center rounded-3xl bg-[#f2e2c7] text-[#7e5a29]"><Code2 className="size-9" /></div> : mode === "image" ? <div className="mx-auto grid size-20 place-items-center rounded-3xl bg-[#f2e2c7] text-[#7e5a29]"><WandSparkles className="size-9" /></div> : <>{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/sophenic-logo.png" alt="Sophenic Artificial Intelligence" className="mx-auto w-[320px] max-w-[82vw] rounded-[28px] shadow-[0_18px_60px_rgba(116,83,34,.08)]" /></>}<h1 className="mt-6 text-2xl font-semibold tracking-tight text-[#403425] sm:text-3xl dark:text-zinc-100">{mode === "code" ? "Que veux-tu construire ?" : mode === "image" ? "Quelle image veux-tu créer ?" : "Comment puis-je t’aider ?"}</h1><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-500">{mode === "code" ? `Sophenic Code crée automatiquement son propre espace de projet, choisit le meilleur modèle via Sophenic Brain, puis utilise directement fichiers, terminal, Docker, Playwright, Web/GitHub, Vercel, tests et QA. Hermes reste optionnel et n’est jamais requis pour coder.` : mode === "image" ? imageAvailable ? "Sophenic Brain utilise automatiquement le meilleur moteur d’image disponible. Aucun modèle n’est à sélectionner manuellement." : "Chargement des capacités de génération d’image…" : `Sophenic Brain est actif en mode ${effortMode === "quick" ? "Rapide" : effortMode === "deep" ? "Deep" : "Auto"}. Il choisit automatiquement le meilleur fournisseur, modèle, clé et fallback disponibles.`}</p>{mode === "code" && resumeAvailable ? <Button type="button" className="mt-4 bg-[#5f4a2e] text-white" onClick={() => void sendCode("reprends")}><RefreshCw className="size-4" />Reprendre la tâche</Button> : null}</div> : <div className="space-y-8 py-4">{currentMessages.map((message) => <motion.article initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>{message.role === "user" ? <div className="max-w-[82%] whitespace-pre-wrap rounded-3xl bg-[#f1e2c8] px-4 py-2.5 text-[15px] leading-6 text-[#4e3f2c] shadow-sm dark:bg-[#40382f] dark:text-zinc-100">{message.content}</div> : <AssistantMessage message={message} onAnswer={(answer) => void answerQuestion(message, answer)} />}</motion.article>)}{sending && <div className="flex items-center gap-1.5 py-2 text-[#b08a55]"><span className="size-1.5 animate-pulse rounded-full bg-current [animation-delay:-.3s]" /><span className="size-1.5 animate-pulse rounded-full bg-current [animation-delay:-.15s]" /><span className="size-1.5 animate-pulse rounded-full bg-current" /></div>}<div ref={endRef} /></div>}</div></section>{mode === "code" && <CodeDashboard events={dashboardEvents} messages={codeMessages} />}{mode === "chat" && latestPlaceMessage?.places?.length ? <aside className="hidden w-[420px] shrink-0 overflow-y-auto border-l border-[#e6d8c2] bg-[#fbf7ef] p-4 xl:block dark:border-white/[0.06] dark:bg-[#171512]"><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><MapPin className="size-4 text-[#9a7138]" />Lieu</div><PlaceResults items={latestPlaceMessage.places} images={latestPlaceMessage.images || []} /></aside> : null}</div>}
+      : <div className="flex min-h-0 flex-1"><section className="min-h-0 min-w-0 flex-1 overflow-y-auto"><div className={cn("mx-auto w-full px-4 pb-44 pt-5 sm:px-6", mode === "code" ? "max-w-4xl" : "max-w-3xl", !currentMessages.length && "flex min-h-full items-center justify-center pb-28")}>{!currentMessages.length ? <div className="mb-14 w-full text-center">{mode === "code" ? <div className="mx-auto grid size-20 place-items-center rounded-3xl bg-[#f2e2c7] text-[#7e5a29]"><Code2 className="size-9" /></div> : mode === "image" ? <div className="mx-auto grid size-20 place-items-center rounded-3xl bg-[#f2e2c7] text-[#7e5a29]"><WandSparkles className="size-9" /></div> : <>{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/sophenic-logo.png" alt="Sophenic Artificial Intelligence" className="mx-auto w-[320px] max-w-[82vw] rounded-[28px] shadow-[0_18px_60px_rgba(116,83,34,.08)]" /></>}<h1 className="mt-6 text-2xl font-semibold tracking-tight text-[#403425] sm:text-3xl dark:text-zinc-100">{mode === "code" ? "Que veux-tu construire ?" : mode === "image" ? "Quelle image veux-tu créer ?" : "Comment puis-je t’aider ?"}</h1><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-500">{mode === "code" ? `Sophenic Code crée automatiquement son propre espace de projet, choisit le meilleur modèle via Sophenic Brain, puis utilise directement fichiers, terminal, Docker, Playwright, Web/GitHub, Vercel, tests et QA. Hermes reste optionnel et n’est jamais requis pour coder.` : mode === "image" ? imageAvailable ? "Sophenic Brain utilise automatiquement le meilleur moteur d’image disponible. Aucun modèle n’est à sélectionner manuellement." : "Chargement des capacités de génération d’image…" : `Sophenic Brain est actif en mode ${effortMode === "quick" ? "Rapide" : effortMode === "deep" ? "Deep" : "Auto"}. Il choisit automatiquement le meilleur fournisseur, modèle, clé et fallback disponibles.`}</p>{mode === "code" && resumeAvailable ? <Button type="button" className="mt-4 bg-[#5f4a2e] text-white" onClick={() => void sendCode("reprends")}><RefreshCw className="size-4" />Reprendre la tâche</Button> : null}</div> : <div className="space-y-8 py-4">{currentMessages.map((message) => <motion.article initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>{message.role === "user" ? <div className="max-w-[82%] rounded-3xl bg-[#f1e2c8] px-4 py-2.5 text-[15px] leading-6 text-[#4e3f2c] shadow-sm dark:bg-[#40382f] dark:text-zinc-100">{message.attachments?.length ? <div className="mb-2 flex flex-wrap gap-1.5">{message.attachments.map((attachment) => attachment.dataUrl && attachmentIsImage(attachment) ? <span key={attachment.id} className="relative"><img src={attachment.dataUrl} alt={attachment.name} className="size-16 rounded-xl border border-black/10 object-cover" /><span className="absolute inset-x-0 bottom-0 truncate rounded-b-xl bg-black/45 px-1 text-[7px] text-white">{attachment.name}</span></span> : <span key={attachment.id} className="flex items-center gap-1 rounded-lg bg-black/[.05] px-2 py-1 text-[9px] font-medium text-[#6b5637] dark:bg-white/10 dark:text-zinc-300"><FileText className="size-3" />{attachment.name}</span>)}</div> : null}<div className="whitespace-pre-wrap">{message.content}</div></div> : <AssistantMessage message={message} onAnswer={(answer) => void answerQuestion(message, answer)} />}</motion.article>)}{sending && <div className="flex items-center gap-1.5 py-2 text-[#b08a55]"><span className="size-1.5 animate-pulse rounded-full bg-current [animation-delay:-.3s]" /><span className="size-1.5 animate-pulse rounded-full bg-current [animation-delay:-.15s]" /><span className="size-1.5 animate-pulse rounded-full bg-current" /></div>}<div ref={endRef} /></div>}</div></section>{mode === "code" && <CodeDashboard events={dashboardEvents} messages={codeMessages} />}{mode === "chat" && latestPlaceMessage?.places?.length ? <aside className="hidden w-[420px] shrink-0 overflow-y-auto border-l border-[#e6d8c2] bg-[#fbf7ef] p-4 xl:block dark:border-white/[0.06] dark:bg-[#171512]"><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><MapPin className="size-4 text-[#9a7138]" />Lieu</div><PlaceResults items={latestPlaceMessage.places} images={latestPlaceMessage.images || []} /></aside> : null}</div>}
 
-      {composerVisible && <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#fffdf8] via-[#fffdf8]/95 to-transparent px-3 pb-3 pt-12 dark:from-[#201d19] dark:via-[#201d19]/95 sm:px-6"><div className={cn("pointer-events-auto mx-auto", mode === "code" ? "max-w-4xl xl:mr-[406px]" : placePanelVisible ? "max-w-3xl xl:mr-[420px]" : "max-w-3xl")}>{error && <div className="mb-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700"><span className="flex-1">{error}</span><button type="button" onClick={() => setError("")}><X className="size-3.5" /></button></div>}<div className="rounded-[26px] border border-[#d9c39e] bg-white/95 p-2 shadow-[0_8px_36px_rgba(112,79,30,.12)] backdrop-blur dark:border-white/[0.08] dark:bg-[#302b25]/95"><textarea ref={textArea} value={input} onChange={(event) => { setInput(event.target.value); event.currentTarget.style.height = "auto"; event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 180)}px`; }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (mode === "chat") void sendChat(); else if (mode === "code") void sendCode(); else void sendImage(); } }} placeholder={mode === "code" ? "Décris ce que tu veux coder…" : mode === "image" ? "Décris l’image à créer…" : "Pose une question ou demande une action sur le PC…"} rows={1} className="max-h-[180px] min-h-11 w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-6 outline-none placeholder:text-zinc-400" /><div className="flex items-center gap-1 px-1 pb-1">{<><div className="flex h-9 items-center gap-1.5 rounded-xl border border-[#e1d0b5] bg-[#faf5ec] px-2.5 text-[11px] font-semibold text-[#735735] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"><Sparkles className="size-3.5" /><span>Sophenic Brain</span><span className="opacity-40">•</span><span className="font-mono">Auto</span></div>{mode !== "image" && <EffortSelector value={effortMode} onChange={setEffortMode} disabled={sending} />}</>}{mode === "code" && <><div className="ml-1 hidden h-9 items-center gap-1.5 rounded-xl bg-[#faf5ec] px-2 text-[10px] text-[#735735] sm:flex dark:bg-white/[0.04]" title={targetFile || workspace || "Sophenic créera automatiquement son propre espace de travail"}><FolderOpen className="size-3.5" /><span>{workspace ? workspaceKind === "managed" ? "Espace Sophenic" : workspaceKind === "external-file" ? "Fichier ciblé" : "Projet ciblé" : "Espace auto"}</span></div><button type="button" onClick={async () => { const chosen = await desktop?.runtime.chooseCodeFile(); if (chosen) { setWorkspace(chosen.workspace); setWorkspaceKind(chosen.kind); setTargetFile(chosen.targetFile || ""); sessions.current.code = undefined; } }} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Sélectionner un fichier existant à corriger/modifier"><Code2 className="mr-1 size-3.5" /><span className="hidden lg:inline">Fichier</span></button><button type="button" onClick={async () => { const chosen = await desktop?.runtime.chooseWorkspace(); if (chosen) { setWorkspace(chosen.workspace); setWorkspaceKind(chosen.kind); setTargetFile(""); sessions.current.code = undefined; } }} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Sélectionner un projet/dossier existant"><FolderOpen className="mr-1 size-3.5" /><span className="hidden lg:inline">Projet</span></button><div className="relative"><button type="button" onClick={() => { const rows = listCodeHandoffs(); setDesignHandoffs(rows); setDesignPickerOpen((open) => !open); }} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Sélectionner un design SOPHENIC (Web Design Engine) pour générer le site"><Palette className="mr-1 size-3.5" /><span className="hidden lg:inline">Design</span></button>{designPickerOpen && (designHandoffs.length ? <div className="absolute bottom-11 left-0 z-50 w-[420px] rounded-2xl border border-[#d9c39e] bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#26221d]"><div className="px-1.5 pb-1.5 text-[9px] font-bold uppercase tracking-[.14em] text-[#9a7447]">Designs SOPHENIC — sélectionne puis choisis ta stack (React · Next.js · Shopify · WordPress · HTML/CSS)</div><div className="max-h-72 overflow-auto">{designHandoffs.map((row) => <button key={row.id} type="button" onClick={() => { setInput(row.implementationBrief); setDesignPickerOpen(false); textArea.current?.focus(); }} className="mb-1 w-full rounded-xl border border-black/[.06] p-2 text-left hover:border-[#c6a477] dark:border-white/[.08]"><div className="text-[11px] font-semibold">{row.name} — {row.blueprint.brand}</div><div className="text-[9px] text-zinc-500">{row.blueprint.industry} · design {row.blueprint.mode}{row.blueprint.templateName ? ` « ${row.blueprint.templateName} »` : ""}{row.blueprint.quality ? ` · ${row.blueprint.quality.scores.overall}/100` : ""} · {new Date(row.createdAt).toLocaleDateString("fr-FR")}</div></button>)}</div></div> : <div className="absolute bottom-11 left-0 z-50 w-[320px] rounded-2xl border border-[#d9c39e] bg-white p-3 text-[10px] leading-4 text-zinc-500 shadow-2xl dark:border-white/10 dark:bg-[#26221d]">Aucun design enregistré. Crée un design dans <span className="font-semibold">Design → Web Design</span>, puis « Envoyer vers SOPHENIC Code ».</div>)}</div>{workspace && <button type="button" onClick={() => void desktop?.runtime.openCodeWorkspace(workspace, targetFile || undefined).catch((cause) => setError(humanError(cause)))} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Ouvrir l’espace de travail dans l’Explorateur Windows"><ExternalLink className="mr-1 size-3.5" /><span className="hidden xl:inline">Ouvrir</span></button>}</>}<div className="flex-1" />{mode === "chat" && <button type="button" onClick={async () => {
+      {composerVisible && <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#fffdf8] via-[#fffdf8]/95 to-transparent px-3 pb-3 pt-12 dark:from-[#201d19] dark:via-[#201d19]/95 sm:px-6"><div className={cn("pointer-events-auto mx-auto", mode === "code" ? "max-w-4xl xl:mr-[406px]" : placePanelVisible ? "max-w-3xl xl:mr-[420px]" : "max-w-3xl")}>{error && <div className="mb-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700"><span className="flex-1">{error}</span><button type="button" onClick={() => setError("")}><X className="size-3.5" /></button></div>}<div className="rounded-[26px] border border-[#d9c39e] bg-white/95 p-2 shadow-[0_8px_36px_rgba(112,79,30,.12)] backdrop-blur dark:border-white/[0.08] dark:bg-[#302b25]/95">{attachments.length ? <div className="mb-1.5 flex flex-wrap gap-1.5 px-1 pt-1">{attachments.map((attachment) => <span key={attachment.id} className="group relative">{attachment.dataUrl && attachmentIsImage(attachment) ? <span className="relative block"><img src={attachment.dataUrl} alt={attachment.name} className="size-14 rounded-xl border border-black/10 object-cover" /><span className="absolute inset-x-0 bottom-0 truncate rounded-b-xl bg-black/45 px-1 text-[7px] text-white">{attachment.name}</span></span> : <span className="flex h-14 max-w-44 items-center gap-1.5 rounded-xl border border-[#e1d0b5] bg-[#faf5ec] px-2 text-[9px] font-medium text-[#6b5637] dark:border-white/10 dark:bg-white/[0.06] dark:text-zinc-300"><FileText className="size-3.5 shrink-0" /><span className="truncate">{attachment.name}</span></span>}<button type="button" onClick={() => setAttachments((current) => current.filter((row) => row.id !== attachment.id))} className="absolute -right-1.5 -top-1.5 grid size-4.5 place-items-center rounded-full bg-[#5f4a2e] text-white opacity-0 transition group-hover:opacity-100" title="Retirer"><X className="size-2.5" /></button></span>)}</div> : null}<textarea ref={textArea} value={input} onChange={(event) => { setInput(event.target.value); event.currentTarget.style.height = "auto"; event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 180)}px`; }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (mode === "chat") void sendChat(); else if (mode === "code") void sendCode(); else void sendImage(); } }} placeholder={mode === "code" ? "Décris ce que tu veux coder…" : mode === "image" ? "Décris l’image à créer…" : "Pose une question ou demande une action sur le PC…"} rows={1} className="max-h-[180px] min-h-11 w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-6 outline-none placeholder:text-zinc-400" /><div className="flex items-center gap-1 px-1 pb-1">{<><div className="flex h-9 items-center gap-1.5 rounded-xl border border-[#e1d0b5] bg-[#faf5ec] px-2.5 text-[11px] font-semibold text-[#735735] dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"><Sparkles className="size-3.5" /><span>Sophenic Brain</span><span className="opacity-40">•</span><span className="font-mono">Auto</span></div>{mode !== "image" && <EffortSelector value={effortMode} onChange={setEffortMode} disabled={sending} />}</>}{mode === "code" && <><div className="ml-1 hidden h-9 items-center gap-1.5 rounded-xl bg-[#faf5ec] px-2 text-[10px] text-[#735735] sm:flex dark:bg-white/[0.04]" title={targetFile || workspace || "Sophenic créera automatiquement son propre espace de travail"}><FolderOpen className="size-3.5" /><span>{workspace ? workspaceKind === "managed" ? "Espace Sophenic" : workspaceKind === "external-file" ? "Fichier ciblé" : "Projet ciblé" : "Espace auto"}</span></div><button type="button" onClick={async () => { const chosen = await desktop?.runtime.chooseCodeFile(); if (chosen) { setWorkspace(chosen.workspace); setWorkspaceKind(chosen.kind); setTargetFile(chosen.targetFile || ""); sessions.current.code = undefined; } }} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Sélectionner un fichier existant à corriger/modifier"><Code2 className="mr-1 size-3.5" /><span className="hidden lg:inline">Fichier</span></button><button type="button" onClick={async () => { const chosen = await desktop?.runtime.chooseWorkspace(); if (chosen) { setWorkspace(chosen.workspace); setWorkspaceKind(chosen.kind); setTargetFile(""); sessions.current.code = undefined; } }} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Sélectionner un projet/dossier existant"><FolderOpen className="mr-1 size-3.5" /><span className="hidden lg:inline">Projet</span></button><div className="relative"><button type="button" onClick={() => { const rows = listCodeHandoffs(); setDesignHandoffs(rows); setDesignPickerOpen((open) => !open); }} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Sélectionner un design SOPHENIC (Web Design Engine) pour générer le site"><Palette className="mr-1 size-3.5" /><span className="hidden lg:inline">Design</span></button>{designPickerOpen && (designHandoffs.length ? <div className="absolute bottom-11 left-0 z-50 w-[420px] rounded-2xl border border-[#d9c39e] bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#26221d]"><div className="px-1.5 pb-1.5 text-[9px] font-bold uppercase tracking-[.14em] text-[#9a7447]">Designs SOPHENIC — sélectionne puis choisis ta stack (React · Next.js · Shopify · WordPress · HTML/CSS)</div><div className="max-h-72 overflow-auto">{designHandoffs.map((row) => <button key={row.id} type="button" onClick={() => { setInput(row.implementationBrief); setDesignPickerOpen(false); textArea.current?.focus(); }} className="mb-1 w-full rounded-xl border border-black/[.06] p-2 text-left hover:border-[#c6a477] dark:border-white/[.08]"><div className="text-[11px] font-semibold">{row.name} — {row.blueprint.brand}</div><div className="text-[9px] text-zinc-500">{row.blueprint.industry} · design {row.blueprint.mode}{row.blueprint.templateName ? ` « ${row.blueprint.templateName} »` : ""}{row.blueprint.quality ? ` · ${row.blueprint.quality.scores.overall}/100` : ""} · {new Date(row.createdAt).toLocaleDateString("fr-FR")}</div></button>)}</div></div> : <div className="absolute bottom-11 left-0 z-50 w-[320px] rounded-2xl border border-[#d9c39e] bg-white p-3 text-[10px] leading-4 text-zinc-500 shadow-2xl dark:border-white/10 dark:bg-[#26221d]">Aucun design enregistré. Crée un design dans <span className="font-semibold">Design → Web Design</span>, puis « Envoyer vers SOPHENIC Code ».</div>)}</div>{workspace && <button type="button" onClick={() => void desktop?.runtime.openCodeWorkspace(workspace, targetFile || undefined).catch((cause) => setError(humanError(cause)))} className="flex h-9 items-center rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9]" title="Ouvrir l’espace de travail dans l’Explorateur Windows"><ExternalLink className="mr-1 size-3.5" /><span className="hidden xl:inline">Ouvrir</span></button>}</>}<input ref={attachmentInput} type="file" multiple accept="image/*,.pdf,.txt,.md,.json,.csv,.tsv,.yaml,.yml,.toml,.log,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.kt,.go,.rs,.c,.h,.cpp,.cs,.php,.rb,.swift,.sql,.sh,.ps1,.bat,.lua,.vue,.svelte,.docx,.doc,.xls,.xlsx,.pptx" className="hidden" onChange={(event) => { void readAttachmentFiles(event.target.files); }} /><button type="button" onClick={() => attachmentInput.current?.click()} disabled={sending || attachments.length >= ATTACHMENT_MAX_COUNT} className="flex h-9 items-center gap-1 rounded-xl px-2 text-[11px] text-[#735735] hover:bg-[#f7ecd9] disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-white/10" title="Joindre des images ou fichiers (analyse par Sophenic)"><Paperclip className="size-3.5" /><span className="hidden lg:inline">Joindre</span></button><div className="flex-1" />{mode === "chat" && <button type="button" onClick={async () => {
         let current = voiceSettings || await refreshVoiceSettings();
         if (current && !current.enabled && desktop?.workspace) {
           current = await desktop.workspace.voiceSave({ ...current, enabled: true }) as VoiceSettings;
           setVoiceSettings(current);
         }
         setVoiceModeOpen(true);
-      }} className={cn("grid size-9 place-items-center rounded-full transition", voiceModeOpen ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/20")} title="Démarrer une conversation vocale" aria-label="Démarrer une conversation vocale"><Mic className="size-4" /></button>}{sending ? <button type="button" onClick={() => void stop()} className="grid size-9 place-items-center rounded-full bg-[#5f4a2e] text-white" title="Arrêter"><CircleStop className="size-4" /></button> : <button type="button" onClick={() => { if (mode === "chat") void sendChat(); else if (mode === "code") void sendCode(); else void sendImage(); }} disabled={!input.trim() || (mode === "image" && !imageAvailable)} className="grid size-9 place-items-center rounded-full bg-[#5f4a2e] text-white disabled:bg-[#e7dbc8] disabled:text-[#a89578]" title="Envoyer"><Send className="size-4" /></button>}</div></div><div className="mt-2 text-center text-[10px] text-zinc-400">{mode === "code" ? "Sophenic Code crée son propre espace par défaut; Fichier/Projet sert uniquement à modifier un élément existant. Recherche Web, Git, terminal, tests et handoff restent sous le même chef de projet." : mode === "image" ? "Sophenic choisit automatiquement le moteur d’image disponible ; aucun choix de modèle n’est exposé." : "Sophenic Brain choisit seul le provider, le modèle, la clé et les fallbacks. Rapide / Auto / Deep règle uniquement l’effort demandé."}</div></div></div>}
+      }} className={cn("grid size-9 place-items-center rounded-full transition", voiceModeOpen ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/20")} title="Démarrer une conversation vocale" aria-label="Démarrer une conversation vocale"><Mic className="size-4" /></button>}{sending ? <button type="button" onClick={() => void stop()} className="grid size-9 place-items-center rounded-full bg-[#5f4a2e] text-white" title="Arrêter"><CircleStop className="size-4" /></button> : <button type="button" onClick={() => { if (mode === "chat") void sendChat(); else if (mode === "code") void sendCode(); else void sendImage(); }} disabled={(!input.trim() && !attachments.length) || (mode === "image" && !imageAvailable)} className="grid size-9 place-items-center rounded-full bg-[#5f4a2e] text-white disabled:bg-[#e7dbc8] disabled:text-[#a89578]" title="Envoyer"><Send className="size-4" /></button>}</div></div><div className="mt-2 text-center text-[10px] text-zinc-400">{mode === "code" ? "Sophenic Code crée son propre espace par défaut; Fichier/Projet sert uniquement à modifier un élément existant. Recherche Web, Git, terminal, tests et handoff restent sous le même chef de projet." : mode === "image" ? "Sophenic choisit automatiquement le moteur d’image disponible ; aucun choix de modèle n’est exposé." : "Sophenic Brain choisit seul le provider, le modèle, la clé et les fallbacks. Rapide / Auto / Deep règle uniquement l’effort demandé."}</div></div></div>}
     </main>
 
     <AnimatePresence>{voiceModeOpen && desktop?.voice && voiceSettings && <VoiceMode

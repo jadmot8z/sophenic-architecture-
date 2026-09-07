@@ -6,6 +6,8 @@
  * 3D, assets, règles responsive) contrôlé par le SOPHENIC Brain existant.
  */
 
+export type WebDesignAttachment = { id: string; name: string; mime: string; size: number; dataUrl: string };
+
 export type WebDesignMode = "template" | "original";
 
 /** Brief créatif analysé par le Brain (industrie, audience, positionnement…). */

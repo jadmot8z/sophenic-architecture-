@@ -151,6 +151,17 @@ function reasoningSupported(provider: SophenicCloudProviderId, model: string): b
   return false;
 }
 
+function wireContent(message: OpenRouterChatMessage): unknown {
+  const images = message.role === "user" ? message.images || [] : [];
+  const files = message.role === "user" ? message.files || [] : [];
+  if (!images.length && !files.length) return message.content;
+  const parts: Array<Record<string, unknown>> = [];
+  if (message.content.trim()) parts.push({ type: "text", text: message.content });
+  for (const url of images) parts.push({ type: "image_url", image_url: { url } });
+  for (const file of files) parts.push({ type: "file", file: { filename: file.name, file_data: file.dataUrl } });
+  return parts.length ? parts : message.content;
+}
+
 function requestBody(input: {
   provider: SophenicCloudProviderId;
   model: string;
@@ -163,7 +174,7 @@ function requestBody(input: {
   const systemPrompt = getSophenicSystemPrompt({ provider: input.provider, model: input.model, memoryQuery: latestPrompt });
   const body: Record<string, unknown> = {
     model: input.model,
-    messages: [{ role: "system", content: systemPrompt }, ...input.messages],
+    messages: [{ role: "system", content: systemPrompt }, ...input.messages.map((message) => ({ role: message.role, content: wireContent(message) }))],
     max_tokens: input.maxTokens || 3200,
     stream: input.stream
   };

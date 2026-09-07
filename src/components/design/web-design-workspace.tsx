@@ -1,23 +1,23 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, BadgeCheck, Boxes, Check, Code2, Download, Layers3, Loader2, Monitor,
-  MousePointerClick, Palette, Send, Smartphone, Sparkles, Tablet, Wand2, X
+  MousePointerClick, Palette, Send, Smartphone, Sparkles, Tablet, X
 } from "lucide-react";
+import { FileText, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArchitectureThinkingTimeline, type ArchitectureWorkStep } from "./architecture-thinking-timeline";
 import { resolveWebDesignBrief } from "@/design/web-design/creative-brief";
-import { runCreativeAgency } from "@/design/web-design/creative-agents";
 import { customizeTemplate, } from "@/design/web-design/template-mode";
 import { rankTemplatesForBrief, templateById } from "@/design/web-design/templates";
 import { designUntilQuality } from "@/design/web-design/quality";
 import { recommendDesignAssets } from "@/design/web-design/asset-plan";
-import { buildDesignPreviewHtml } from "@/design/web-design/preview";
+import { buildDesignPreviewHtml, buildTemplatePreviewHtml } from "@/design/web-design/preview";
 import { downloadWebDesignProjectZip } from "@/design/web-design/export";
 import { buildCodeHandoff, saveCodeHandoff, codeSelectionPrompt } from "@/design/web-design/code-handoff";
 import type { DesignProject } from "@/design/types";
-import type { WebDesignBlueprint, WebDesignMode } from "@/design/web-design/types";
+import type { WebDesignBlueprint, WebDesignMode, WebDesignTemplate, WebDesignAttachment } from "@/design/web-design/types";
 
 /**
  * SOPHENIC WEB DESIGN ENGINE — atelier de design de sites.
@@ -41,14 +41,34 @@ const SCORE_LABELS: Array<{ key: keyof NonNullable<WebDesignBlueprint["quality"]
 ];
 
 export function WebDesignWorkspace({ project, onMutate, onBack, effortMode = "auto" }: Props) {
-  const [mode, setMode] = useState<WebDesignMode>(project.webDesign?.mode || "original");
+  // V8.4 : le mode « agence créative sans template » est supprimé — seul le
+  // flux Template Intelligence reste. Les anciens blueprints originaux restent lisibles.
+  const [mode] = useState<WebDesignMode>("template");
   const [instruction, setInstruction] = useState("");
+  const [attachments, setAttachments] = useState<WebDesignAttachment[]>([]);
+  const attachmentInput = useRef<HTMLInputElement | null>(null);
+  const readAttachmentFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const accepted: WebDesignAttachment[] = [];
+    for (const file of Array.from(files).slice(0, 6)) {
+      if (file.size > 5 * 1024 * 1024) continue;
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => resolve("");
+        reader.readAsDataURL(file);
+      });
+      if (dataUrl) accepted.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: file.name, mime: file.type || "", size: file.size, dataUrl });
+    }
+    setAttachments((current) => [...current, ...accepted].slice(0, 6));
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
   const [steps, setSteps] = useState<ArchitectureWorkStep[]>([]);
   const [viewport, setViewport] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [handoffNotice, setHandoffNotice] = useState("");
+  const [testingTemplate, setTestingTemplate] = useState<WebDesignTemplate | null>(null);
 
   const state = project.webDesign;
   const blueprint = state?.blueprint;
@@ -62,8 +82,8 @@ export function WebDesignWorkspace({ project, onMutate, onBack, effortMode = "au
   const baseSteps = (designMode: WebDesignMode, referenceCount = 0): ArchitectureWorkStep[] => [
     { id: "brief", label: "Analyse créative (Brain)", detail: "Le SOPHENIC Brain analyse industrie, audience, positionnement, émotions et conversion.", status: "running" },
     ...(designMode === "template"
-      ? [{ id: "templates", label: "Templates compatibles", detail: "Classement de la bibliothèque interne (top 3).", status: "queued" } as ArchitectureWorkStep]
-      : [{ id: "agency", label: "Agence créative", detail: "Creative Director → UX → Brand → Visual → Motion → 3D → Conversion.", status: "queued" } as ArchitectureWorkStep]),
+      ? [{ id: "templates", label: "Templates compatibles", detail: "Classement de la bibliothèque interne (top 5, testables en entier).", status: "queued" } as ArchitectureWorkStep]
+      : [{ id: "agency", label: "Agence créative (héritée)", detail: "Blueprint original existant — lecture seule.", status: "queued" } as ArchitectureWorkStep]),
     { id: "blueprint", label: "Website Design Blueprint", detail: "Pages, sections, identité visuelle, composants, responsive.", status: "queued" },
     { id: "quality", label: "Contrôle qualité design", detail: "Visual / UX / Conversion / Brand / Mobile — évaluation puis auto-amélioration.", status: "queued" },
     { id: "assets", label: "Asset Intelligence", detail: "Images, icônes, illustrations, 3D, animations recommandées.", status: "queued" },
@@ -75,35 +95,27 @@ export function WebDesignWorkspace({ project, onMutate, onBack, effortMode = "au
     const request = (rawInstruction || instruction || "").trim();
     if (!request && !state?.brief) { setError("Décris le site à designer (marque, secteur, ambiance…)."); return; }
     setBusy(true); setError(""); setProgress("Analyse créative via SOPHENIC Brain…");
+    setTestingTemplate(null);
     setSteps(baseSteps(designMode));
     try {
-      const brief = request ? await resolveWebDesignBrief({ instruction: request, effortMode }) : state!.brief!;
+      const brief = request ? await resolveWebDesignBrief({ instruction: request, effortMode, attachments }) : state!.brief!;
       updateStep("brief", "done", `${brief.brand ? `« ${brief.brand} » · ` : ""}${brief.industry} · ${brief.premiumLevel} · conversion : ${brief.conversionGoal}${brief.origin === "brain" ? " · via SOPHENIC Brain" : " · analyse locale déterministe"}`);
       onMutate((draft) => { draft.webDesign = { ...(draft.webDesign || {}), mode: designMode, brief, blueprint: undefined, selectedTemplateId: templateId }; }, "Brief créatif analysé");
 
-      let nextBlueprint: WebDesignBlueprint;
-      if (designMode === "template" && !templateId) {
+      if (!templateId) {
         const ranked = rankTemplatesForBrief(brief);
         updateStep("templates", "done", ranked.map((candidate) => `${candidate.name} ${candidate.compatibility}%`).join(" · "));
         onMutate((draft) => { draft.webDesign = { ...(draft.webDesign || {}), mode: designMode, brief, templateCandidates: ranked, blueprint: undefined }; }, `${ranked.length} templates compatibles`);
         setBusy(false); setProgress(""); setSteps([]);
         return; // attente du choix utilisateur
       }
-      if (designMode === "template" && templateId) {
-        const template = templateById(templateId);
-        if (!template) throw new Error("Template introuvable.");
-        setProgress(`Personnalisation du template « ${template.name} »…`);
-        updateStep("templates", "done", `sélection : ${template.name}`);
-        const customized = customizeTemplate(template, brief);
-        updateStep("templates", "done", `${template.name} re-personnalisé : ${Math.round(customized.structureKeptRatio * 100)}% de structure conservée, identité visuelle remplacée.`);
-        nextBlueprint = customized.blueprint;
-      } else {
-        setProgress("L'agence créative compose le design…");
-        updateStep("agency", "running", "Creative Director : direction artistique…");
-        const agency = runCreativeAgency(brief);
-        nextBlueprint = agency.blueprint;
-        updateStep("agency", "done", `${agency.log.length} agents ont collaboré : ${agency.log.map((step) => step.agent).join(" → ")}.`);
-      }
+      const template = templateById(templateId);
+      if (!template) throw new Error("Template introuvable.");
+      setProgress(`Personnalisation du template « ${template.name} »…`);
+      updateStep("templates", "done", `sélection : ${template.name}`);
+      const customized = customizeTemplate(template, brief);
+      updateStep("templates", "done", `${template.name} re-personnalisé : ${Math.round(customized.structureKeptRatio * 100)}% de structure conservée, identité visuelle remplacée.`);
+      const nextBlueprint: WebDesignBlueprint = customized.blueprint;
 
       updateStep("blueprint", "done", `${nextBlueprint.pages.length} pages · ${nextBlueprint.pages.reduce((sum, page) => sum + page.sections.length, 0)} sections · ${nextBlueprint.visualStyle.typography}`);
       updateStep("quality", "running", "Évaluation Visual/UX/Conversion/Brand/Mobile…");
@@ -135,7 +147,10 @@ export function WebDesignWorkspace({ project, onMutate, onBack, effortMode = "au
     }
   };
 
-  const previewHtml = useMemo(() => blueprint ? buildDesignPreviewHtml(blueprint) : "", [blueprint]);
+  const previewHtml = useMemo(() => {
+    if (testingTemplate) return buildTemplatePreviewHtml(testingTemplate, blueprint?.brand);
+    return blueprint ? buildDesignPreviewHtml(blueprint) : "";
+  }, [testingTemplate, blueprint]);
   const quality = blueprint?.quality;
 
   return <div className="flex h-full min-h-[650px] flex-col overflow-hidden bg-[#f5f2eb] text-zinc-800 dark:bg-[#101010] dark:text-zinc-100">
@@ -153,31 +168,38 @@ export function WebDesignWorkspace({ project, onMutate, onBack, effortMode = "au
       {/* Colonne gauche : modes, demande, pipeline */}
       <aside className="flex w-[340px] max-w-[40vw] shrink-0 flex-col border-r border-black/[.07] bg-[#fbf9f5] dark:border-white/[.07] dark:bg-[#141414]">
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          <div className="mb-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setMode("template")} disabled={busy} className={cn("rounded-xl border p-2.5 text-left transition", mode === "template" ? "border-[#b58a55] bg-[#f6ecdc] dark:bg-white/10" : "border-black/10 bg-white/60 hover:border-[#c6a477] dark:border-white/10 dark:bg-white/[.03]")}>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold"><Layers3 className="size-3.5 text-[#8a6539]" />Template Intelligence</div>
-              <p className="mt-1 text-[9px] leading-4 text-zinc-500">Rapide et économique : la bibliothèque interne fournit 3 structures, SOPHENIC re-personnalise tout (identité, couleurs, typo, animations). Le résultat ne ressemble pas au template.</p>
-            </button>
-            <button type="button" onClick={() => setMode("original")} disabled={busy} className={cn("rounded-xl border p-2.5 text-left transition", mode === "original" ? "border-[#b58a55] bg-[#f6ecdc] dark:bg-white/10" : "border-black/10 bg-white/60 hover:border-[#c6a477] dark:border-white/10 dark:bg-white/[.03]")}>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold"><Wand2 className="size-3.5 text-[#8a6539]" />Création Originale</div>
-              <p className="mt-1 text-[9px] leading-4 text-zinc-500">Mode premium : agence créative complète (direction de création, UX, branding, motion, 3D, conversion) — design unique, sans template.</p>
-            </button>
+          <div className="mb-3 rounded-xl border border-[#b58a55] bg-[#f6ecdc] p-2.5 dark:border-white/10 dark:bg-white/10">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold"><Layers3 className="size-3.5 text-[#8a6539]" />Template Intelligence</div>
+            <p className="mt-1 text-[9px] leading-4 text-zinc-500">La bibliothèque interne (24 templates) fournit des structures éprouvées : SOPHENIC en propose 5 après ton brief, tu les testes en entier, puis SOPHENIC re-personnalise tout (identité, couleurs, typo, animations). Le résultat ne ressemble pas au template.</p>
           </div>
 
           {awaitingTemplateChoice ? <div className="mb-3">
             <div className="mb-2 text-[8px] font-bold uppercase tracking-[.16em] text-[#8a6539]">Templates compatibles — choisis une structure de départ</div>
             <div className="space-y-2">
-              {candidates.map((candidate) => (
-                <button key={candidate.templateId} type="button" disabled={busy} onClick={() => void generate("template", undefined, candidate.templateId)} className="w-full rounded-xl border border-black/10 bg-white p-2.5 text-left hover:border-[#c6a477] dark:border-white/10 dark:bg-white/[.03]">
-                  <div className="flex items-center justify-between"><span className="text-[11px] font-semibold">{candidate.name}</span><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Compatibilité {candidate.compatibility}%</span></div>
+              {candidates.map((candidate) => {
+                const template = templateById(candidate.templateId);
+                const isTesting = testingTemplate?.id === candidate.templateId;
+                return <div key={candidate.templateId} className={cn("rounded-xl border p-2.5", isTesting ? "border-[#b58a55] bg-[#f6ecdc] dark:bg-white/10" : "border-black/10 bg-white dark:border-white/10 dark:bg-white/[.03]")}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold">{candidate.name}</span>
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Compatibilité {candidate.compatibility}%</span>
+                  </div>
+                  <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[.16em] text-[#8a6539] dark:text-zinc-400">✦ SOPHENIC AI · {template ? `${template.pages.length} pages · ${template.pages.reduce((sum, page) => sum + page.sections.length, 0)} sections` : ""}</div>
                   <div className="mt-1 text-[9px] leading-4 text-zinc-500">{candidate.reasons.join(" · ")}</div>
-                </button>
-              ))}
+                  <div className="mt-2 flex gap-1.5">
+                    <button type="button" disabled={busy} onClick={() => { const row = templateById(candidate.templateId); if (row) setTestingTemplate(isTesting ? null : row); }} className={cn("flex h-7 items-center gap-1 rounded-lg px-2 text-[9px] font-bold", isTesting ? "bg-[#7f5d36] text-white" : "bg-black/5 text-zinc-600 hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300")}>{isTesting ? "En test — fermer" : "Tester"}</button>
+                    <button type="button" disabled={busy} onClick={() => void generate("template", undefined, candidate.templateId)} className="flex h-7 items-center gap-1 rounded-lg bg-[#7f5d36] px-2.5 text-[9px] font-bold text-white hover:bg-[#6d4e2c] disabled:opacity-35">Sélectionner</button>
+                  </div>
+                </div>;
+              })}
             </div>
           </div> : <div className="mb-3">
-            <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} rows={3} disabled={busy} placeholder={mode === "template" ? "Ex. Crée un site pour une marque de café de spécialité…" : "Ex. Crée un site de villa de luxe à Marrakech…"} className="w-full resize-none rounded-xl border border-black/10 bg-white p-2.5 text-[11px] leading-5 outline-none focus:border-[#c19a68] dark:border-white/10 dark:bg-white/[.04]" />
+            <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} rows={3} disabled={busy} placeholder="Ex. Crée un site pour une marque de café de spécialité à Casablanca…" className="w-full resize-none rounded-xl border border-black/10 bg-white p-2.5 text-[11px] leading-5 outline-none focus:border-[#c19a68] dark:border-white/10 dark:bg-white/[.04]" />
+            {attachments.length ? <div className="mt-1.5 flex flex-wrap gap-1.5">{attachments.map((attachment) => <span key={attachment.id} className="group relative">{attachment.mime.startsWith("image/") ? <span className="relative block"><img src={attachment.dataUrl} alt={attachment.name} className="size-12 rounded-lg border border-black/10 object-cover" /><span className="absolute inset-x-0 bottom-0 truncate rounded-b-lg bg-black/45 px-1 text-[7px] text-white">{attachment.name}</span></span> : <span className="flex h-12 max-w-40 items-center gap-1 rounded-lg border border-black/10 bg-white/70 px-2 text-[9px] font-medium text-zinc-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-zinc-300"><FileText className="size-3 shrink-0" /><span className="truncate">{attachment.name}</span></span>}<button type="button" onClick={() => setAttachments((current) => current.filter((row) => row.id !== attachment.id))} className="absolute -right-1.5 -top-1.5 grid size-4 place-items-center rounded-full bg-[#5f4a2e] text-white opacity-0 transition group-hover:opacity-100" title="Retirer"><X className="size-2.5" /></button></span>)}</div> : null}
             <div className="mt-1.5 flex items-center gap-2">
-              <button type="button" disabled={busy || !instruction.trim()} onClick={() => void generate(mode)} className="flex h-8 items-center gap-1.5 rounded-xl bg-[#7f5d36] px-3 text-[10px] font-semibold text-white disabled:opacity-35">{busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}{mode === "template" ? "Trouver mes templates" : "Créer le design"}</button>
+              <input ref={attachmentInput} type="file" multiple accept="image/*,.pdf,.txt,.md,.json,.csv,.docx,.pptx" className="hidden" onChange={(event) => { void readAttachmentFiles(event.target.files); }} />
+              <button type="button" onClick={() => attachmentInput.current?.click()} disabled={busy || attachments.length >= 6} className="flex h-8 items-center gap-1 rounded-xl border border-black/10 px-2.5 text-[10px] font-medium text-zinc-600 hover:border-[#c6a477] disabled:opacity-35 dark:border-white/10 dark:text-zinc-300" title="Joindre des images de référence ou fichiers (analysés par le SOPHENIC Brain)"><Paperclip className="size-3.5" />Références</button>
+              <button type="button" disabled={busy || !instruction.trim()} onClick={() => void generate(mode)} className="flex h-8 items-center gap-1.5 rounded-xl bg-[#7f5d36] px-3 text-[10px] font-semibold text-white disabled:opacity-35">{busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}{"Trouver mes templates"}</button>
               {state?.brief && !busy && <span className="text-[8px] text-zinc-400">Brief actuel : {state.brief.industry}</span>}
             </div>
             {!state?.brief && <div className="mt-2 space-y-1.5">{SUGGESTIONS.map((text) => <button key={text} type="button" onClick={() => setInstruction(text)} className="w-full rounded-xl border border-black/[.06] bg-white/55 p-2 text-left text-[9px] leading-4 text-zinc-500 hover:border-[#c6a477] dark:border-white/[.07] dark:bg-white/[.025]">{text}</button>)}</div>}
@@ -234,13 +256,15 @@ export function WebDesignWorkspace({ project, onMutate, onBack, effortMode = "au
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-10 shrink-0 items-center gap-2 border-b border-black/[.06] px-3 dark:border-white/[.06]">
           <span className="text-[8px] font-bold uppercase tracking-[.12em] text-zinc-400">Aperçu du design</span>
+          {testingTemplate && <span className="rounded-full bg-[#f3ead9] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[.14em] text-[#7c5a30] dark:bg-white/10 dark:text-zinc-300">✦ SOPHENIC AI · template « {testingTemplate.name} »</span>}
           <div className="flex-1" />
+          {testingTemplate && blueprint && <button type="button" onClick={() => setTestingTemplate(null)} className="flex h-7 items-center gap-1 rounded-lg bg-black/5 px-2 text-[9px] font-semibold text-zinc-600 hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300">↩ Revenir à mon design</button>}
           <div className="flex items-center gap-1 rounded-xl bg-black/[.03] p-1 dark:bg-white/[.045]">
             {([["desktop", Monitor, "Desktop"], ["tablet", Tablet, "Tablette"], ["mobile", Smartphone, "Mobile"]] as const).map(([id, Icon, label]) => <button key={id} type="button" onClick={() => setViewport(id)} title={label} className={cn("flex h-7 items-center gap-1 rounded-lg px-2 text-[9px] font-semibold", viewport === id ? "bg-white text-[#805b32] shadow-sm dark:bg-white/10" : "text-zinc-400")}><Icon className="size-3" />{label}</button>)}
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto bg-[#ece7dd] p-3 dark:bg-black/30">
-          {previewHtml ? <div className="mx-auto h-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg transition-all dark:border-white/10" style={{ width: viewport === "desktop" ? "100%" : viewport === "tablet" ? "768px" : "390px", maxWidth: "100%" }}><iframe title="Aperçu design" srcDoc={previewHtml} className="h-full min-h-[600px] w-full" sandbox="allow-same-origin" /></div>
+          {previewHtml ? <div className="mx-auto h-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg transition-all dark:border-white/10" style={{ width: viewport === "desktop" ? "100%" : viewport === "tablet" ? "768px" : "390px", maxWidth: "100%" }}><iframe title="Aperçu design" srcDoc={previewHtml} className="h-full min-h-[600px] w-full" sandbox={testingTemplate ? "allow-scripts" : "allow-same-origin"} /></div>
             : <div className="grid h-full place-items-center text-center"><div><MousePointerClick className="mx-auto mb-3 size-8 text-zinc-300" /><p className="max-w-sm text-[11px] leading-5 text-zinc-400">Décris le site à designer puis lance la génération.<br />Le design (blueprint) sera prévisualisé ici — le code viendra ensuite, dans SOPHENIC Code.</p></div></div>}
         </div>
       </div>

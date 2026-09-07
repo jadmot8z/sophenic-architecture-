@@ -854,8 +854,22 @@ function registerDesktopIpc(): void {
       const row = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : {};
       const role: OpenRouterChatMessage["role"] = row.role === "assistant" ? "assistant" : "user";
       const content = typeof row.content === "string" ? row.content : "";
-      return { role, content };
-    }).filter((message) => message.content.trim());
+      const images = Array.isArray(row.images)
+        ? row.images.filter((item): item is string => typeof item === "string" && item.startsWith("data:image/")).slice(0, 6)
+        : [];
+      const files = Array.isArray(row.files)
+        ? row.files.flatMap((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+          const file = item as Record<string, unknown>;
+          const name = typeof file.name === "string" ? file.name.slice(0, 180) : "";
+          const mime = typeof file.mime === "string" ? file.mime.slice(0, 100) : "";
+          const dataUrl = typeof file.dataUrl === "string" ? file.dataUrl : "";
+          if (!name || !mime || !dataUrl.startsWith("data:") || dataUrl.length > 9_000_000) return [];
+          return [{ name, mime, dataUrl }];
+        }).slice(0, 4)
+        : [];
+      return { role, content, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}) };
+    }).filter((message) => message.content.trim() || (message.images && message.images.length) || (message.files && message.files.length));
     if (!messages.length) throw new Error("Message vide.");
     const latestUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
     if (latestUserMessage) rememberUserLanguage(latestUserMessage);

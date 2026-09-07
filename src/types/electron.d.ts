@@ -379,7 +379,7 @@ declare global {
         models(force?: boolean): Promise<OpenRouterModel[]>;
         account(): Promise<OpenRouterAccount>;
         imageModels(force?: boolean): Promise<OpenRouterImageModel[]>;
-        chat(input: { requestId: string; provider?: string; model: string; effortMode?: "quick" | "auto" | "deep"; messages: Array<{ role: "user" | "assistant"; content: string }> }): Promise<OpenRouterChatResult>;
+        chat(input: { requestId: string; provider?: string; model: string; effortMode?: "quick" | "auto" | "deep"; messages: Array<{ role: "user" | "assistant"; content: string; images?: string[]; files?: Array<{ name: string; mime: string; dataUrl: string }> }> }): Promise<OpenRouterChatResult>;
         generateImage(input: { requestId: string; prompt: string; aspectRatio?: string; quality?: "auto" | "low" | "medium" | "high" }): Promise<OpenRouterGeneratedImageResult>;
         abort(requestId: string): Promise<boolean>;
         onStream(listener: (event: { requestId: string; text: string }) => void): () => void;

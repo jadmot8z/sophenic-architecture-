@@ -1,4 +1,5 @@
 import { chatWithExistingBrain, parseBrainJson, type BrainChatMessage, type DesignIntentEffortMode } from "../design-intent-ai";
+import type { WebDesignAttachment } from "./types";
 import { hashText } from "./style-engine";
 import type { WebDesignBrief } from "./types";
 
@@ -169,8 +170,19 @@ export const WEB_BRIEF_BRAIN_PROMPT = `Tu es directeur de création digital seni
 {"brand":"nom de marque ou \"\"","industry":"secteur précis","audience":"cible en une phrase","positioning":"positionnement de marque en une phrase","emotions":["3-5 émotions cibles"],"premiumLevel":"accessible|premium|ultra-premium","conversionGoal":"objectif de conversion principal","pages":["pages du site (4-8)"],"traits":{"luxury":0-1,"minimal":0-1,"immersive3d":0-1,"editorial":0-1,"dark":0-1,"colorful":0-1,"corporate":0-1,"playful":0-1,"ecommerce":0-1,"storytelling":0-1,"technological":0-1}}
 RÈGLES : déduis l'industrie du vocabulaire réel (joaillerie, hôtellerie, gaming, IA, mode, restauration, finance, santé, créatif, e-commerce, média…). Sois précis sur les traits (un site de luxe joaillier n'a rien à voir avec un site de gaming IA). N'invente pas de marque si aucune n'est citée.`;
 
-export function buildBriefMessages(instruction: string): BrainChatMessage[] {
-  return [{ role: "user", content: `${WEB_BRIEF_BRAIN_PROMPT}\n\n====================\n\nDEMANDE : ${instruction.slice(0, 3000)}\n\nRenvoie maintenant le JSON du brief créatif.` }];
+export function buildBriefMessages(instruction: string, attachments?: WebDesignAttachment[]): BrainChatMessage[] {
+  const files = attachments || [];
+  const images = files.filter((file) => file.mime.startsWith("image/")).map((file) => file.dataUrl);
+  const documents = files.filter((file) => !file.mime.startsWith("image/")).map((file) => ({ name: file.name, mime: file.mime, dataUrl: file.dataUrl }));
+  const attachmentNote = files.length
+    ? `\n\nRÉFÉRENCES JOINTES PAR L'UTILISATEUR (${files.length}) : ${files.map((file) => `${file.name} (${file.mime || "inconnu"})`).join(", ")}. Analyse-les (style visuel, couleurs, ambiance, niveau de gamme) et intègre ce que tu vois dans le brief (emotions, traits, premiumLevel).`
+    : "";
+  return [{
+    role: "user",
+    content: `${WEB_BRIEF_BRAIN_PROMPT}\n\n====================\n\nDEMANDE : ${instruction.slice(0, 3000)}${attachmentNote}\n\nRenvoie maintenant le JSON du brief créatif.`,
+    ...(images.length ? { images } : {}),
+    ...(documents.length ? { files: documents } : {})
+  }];
 }
 
 function asNumber01(value: unknown, fallback: number): number {
@@ -207,10 +219,10 @@ function mergeBrainBrief(base: WebDesignBrief, brain: Record<string, unknown>): 
  * Résout le brief : 1) heuristique déterministe (garde-fou), 2) enrichissement
  * par le SOPHENIC Brain existant (desktop IPC → route web), champ par champ.
  */
-export async function resolveWebDesignBrief(input: { instruction: string; effortMode?: DesignIntentEffortMode }): Promise<WebDesignBrief> {
+export async function resolveWebDesignBrief(input: { instruction: string; effortMode?: DesignIntentEffortMode; attachments?: WebDesignAttachment[] }): Promise<WebDesignBrief> {
   const base = heuristicWebDesignBrief(input.instruction);
   try {
-    const response = await chatWithExistingBrain(buildBriefMessages(input.instruction), input.effortMode || "auto");
+    const response = await chatWithExistingBrain(buildBriefMessages(input.instruction, input.attachments), input.effortMode || "auto");
     if (!response.content) return base;
     const parsed = parseBrainJson(response.content);
     if (!parsed || typeof parsed !== "object") return base;

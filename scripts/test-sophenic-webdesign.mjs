@@ -1,13 +1,17 @@
 /**
- * SOPHENIC WEB DESIGN ENGINE — Tests obligatoires avant livraison.
+ * SOPHENIC WEB DESIGN ENGINE — Tests obligatoires avant livraison. (V8.4)
+ *
+ * V8.4 : le mode « Création Originale » est SUPPRIMÉ — seul le flux
+ * Template Intelligence reste (brief → top 5 templates → test intégral →
+ * sélection → re-personnalisation). Bibliothèque : 24 templates.
  *
  * TEST 1 : « Create a luxury jewelry brand website » → design premium élégant.
  * TEST 2 : « Create a gaming AI website » → langage visuel radicalement différent.
- * TEST 3 : Template mode — template luxe re-personnalisé pour une AUTRE marque :
+ * TEST 3 : Template mode — template re-personnalisé pour la marque :
  *          structure conservée, identité visuelle changée.
  * TEST 4 : Système qualité (scores + auto-amélioration) + export ZIP complet.
  * TEST 5 : Asset Intelligence + passerelle SOPHENIC Code (handoff, stacks).
- * TEST 6 : Anti-répétition — deux marques différentes ≠ même design.
+ * TEST 6 : Anti-répétition — briefs différents ≠ même design ; galerie variée.
  */
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -23,7 +27,7 @@ const assert = (value, message) => { if (!value) throw new Error(message); };
 /* ---------- 1. Syntaxe des modules WEB DESIGN ---------- */
 for (const file of [
   "src/design/web-design/types.ts", "src/design/web-design/templates.ts", "src/design/web-design/style-engine.ts",
-  "src/design/web-design/creative-brief.ts", "src/design/web-design/creative-agents.ts", "src/design/web-design/template-mode.ts",
+  "src/design/web-design/creative-brief.ts", "src/design/web-design/template-mode.ts",
   "src/design/web-design/quality.ts", "src/design/web-design/asset-plan.ts", "src/design/web-design/preview.ts",
   "src/design/web-design/export.ts", "src/design/web-design/code-handoff.ts", "src/design/web-design/../web-export.ts",
   "src/design/types.ts", "src/design/project-factory.ts", "src/design/design-intent-ai.ts"
@@ -38,9 +42,12 @@ for (const file of [
 
 /* ---------- 2. Contrats UI + Brain ---------- */
 const workspaceSource = await readFile("src/components/design/web-design-workspace.tsx", "utf8");
-for (const expected of ["Template Intelligence", "Création Originale", "Compatibilité", "Envoyer vers SOPHENIC Code", "SOPHENIC_WEB_DESIGN_PROJECT", "Aperçu du design", "resolveWebDesignBrief", "runCreativeAgency", "rankTemplatesForBrief", "designUntilQuality", "recommendDesignAssets"]) {
+for (const expected of ["Template Intelligence", "✦ SOPHENIC AI", "Tester", "Sélectionner", "Compatibilité", "Envoyer vers SOPHENIC Code", "SOPHENIC_WEB_DESIGN_PROJECT", "Aperçu du design", "resolveWebDesignBrief", "rankTemplatesForBrief", "designUntilQuality", "recommendDesignAssets", "buildTemplatePreviewHtml", "24 templates"]) {
   assert(workspaceSource.includes(expected), `UI Web Design incomplète : « ${expected} » absent de web-design-workspace.tsx.`);
 }
+assert(!workspaceSource.includes("Création Originale"), "V8.4 : le mode « Création Originale » doit être supprimé de l'UI Web Design.");
+assert(!workspaceSource.includes("runCreativeAgency"), "V8.4 : l'agence créative sans template ne doit plus être appelée par l'UI.");
+assert(!workspaceSource.includes('setMode("original")'), "V8.4 : le sélecteur de mode original doit avoir disparu.");
 const designWorkspaceSource = await readFile("src/components/design/design-workspace.tsx", "utf8");
 assert(designWorkspaceSource.includes('domain: "webdesign"') && designWorkspaceSource.includes("WebDesignWorkspace"), "Le domaine webdesign n'est pas intégré à l'écran de création de projet.");
 const agentSource = await readFile("src/components/agent/local-agent-workspace.tsx", "utf8");
@@ -61,7 +68,7 @@ try {
     "simulations.ts", "furniture-catalog.ts", "room-blueprint.ts", "furniture-layout-agent.ts", "space-rebuild.ts",
     "design-intent-ai.ts", "room-understanding.ts", "web-export.ts",
     "web-design/types.ts", "web-design/templates.ts", "web-design/style-engine.ts", "web-design/creative-brief.ts",
-    "web-design/creative-agents.ts", "web-design/template-mode.ts", "web-design/quality.ts", "web-design/asset-plan.ts",
+    "web-design/template-mode.ts", "web-design/quality.ts", "web-design/asset-plan.ts",
     "web-design/preview.ts", "web-design/export.ts", "web-design/code-handoff.ts"
   ].map((name) => path.resolve("src/design", name)).concat([path.resolve("src/types/electron.d.ts")]);
   const config = {
@@ -76,7 +83,6 @@ try {
   const WD = (name) => require(path.join(outDir, "design", "web-design", name));
   const factory = D("project-factory");
   const briefRuntime = WD("creative-brief");
-  const agencyRuntime = WD("creative-agents");
   const templateRuntime = WD("templates");
   const templateModeRuntime = WD("template-mode");
   const qualityRuntime = WD("quality");
@@ -91,13 +97,26 @@ try {
     assert(project.domain === "webdesign" && project.unit === "px", "Le domaine webdesign doit exister côté projet (unit px).");
     return project;
   };
+  // V8.4 : le seul chemin produit est le flux Template Intelligence.
   const design = (instruction, options = {}) => {
     const brief = briefRuntime.heuristicWebDesignBrief(instruction);
-    const agency = agencyRuntime.runCreativeAgency(brief, { seed: options.seed });
-    const qualified = qualityRuntime.designUntilQuality({ blueprint: agency.blueprint, brief });
+    const ranked = templateRuntime.rankTemplatesForBrief(brief);
+    const chosen = templateRuntime.templateById(options.templateId || ranked[0].templateId);
+    const customized = templateModeRuntime.customizeTemplate(chosen, brief, options.seed !== undefined ? { seed: options.seed } : {});
+    const qualified = qualityRuntime.designUntilQuality({ blueprint: customized.blueprint, brief });
     qualified.blueprint.assets = assetRuntime.recommendDesignAssets(qualified.blueprint, brief);
-    return { brief, blueprint: qualified.blueprint, report: qualified.report, fixes: qualified.fixes };
+    return { brief, template: chosen, blueprint: qualified.blueprint, report: qualified.report, fixes: qualified.fixes };
   };
+  // Bibliothèque V8.4 : 24 templates.
+  assert(templateRuntime.WEB_DESIGN_TEMPLATES.length === 24, `V8.4 : 24 templates attendus, obtenu ${templateRuntime.WEB_DESIGN_TEMPLATES.length}.`);
+  const templateIds = new Set(templateRuntime.WEB_DESIGN_TEMPLATES.map((template) => template.id));
+  assert(templateIds.size === 24, "V8.4 : les ids de templates doivent être uniques.");
+  for (const template of templateRuntime.WEB_DESIGN_TEMPLATES) {
+    const templateSectionCount = template.pages.reduce((sum, page) => sum + page.sections.length, 0);
+    assert(template.pages.length >= 3 && templateSectionCount >= 6 && template.pages.every((page) => page.sections.length >= 1), `V8.4 : template « ${template.id} » trop pauvre (${template.pages.length} pages / ${templateSectionCount} sections).`);
+    assert(template.components.length >= 3, `V8.4 : template « ${template.id} » — moins de 3 composants.`);
+    assert(template.visualStyle.colors.length >= 4, `V8.4 : template « ${template.id} » — palette < 4 couleurs.`);
+  }
 
   /* ================= TEST 1 — LUXURY JEWELRY (ORIGINAL) ================= */
   const J = design("Create a luxury jewelry brand website");
@@ -113,11 +132,13 @@ try {
   assert(J.blueprint.pages.length >= 4, `TEST 1: ${J.blueprint.pages.length} pages seulement.`);
   assert(J.blueprint.pages.some((page) => /collection/i.test(page.name)), "TEST 1: page Collections absente.");
   assert(J.blueprint.conversion.primaryCta.length > 2, "TEST 1: aucun CTA principal.");
-  assert(J.blueprint.agencyLog.length >= 6, `TEST 1: pipeline d'agence incomplet (${J.blueprint.agencyLog.length} agents).`);
-  assert(J.blueprint.agencyLog.some((step) => /Creative Director/.test(step.agent)), "TEST 1: le Creative Director doit participer.");
+  assert(J.blueprint.agencyLog.length >= 5, `TEST 1: pipeline de personnalisation incomplet (${J.blueprint.agencyLog.length} agents).`);
+  assert(J.blueprint.agencyLog.some((step) => /Template Selection/.test(step.agent)), "TEST 1: la sélection de template doit être tracée.");
+  assert(J.blueprint.agencyLog.some((step) => /Brand Restyler/.test(step.agent)), "TEST 1: le transfert d'identité de marque doit être tracé.");
   assert(J.blueprint.agencyLog.some((step) => /Conversion/.test(step.agent)), "TEST 1: le Conversion Specialist doit participer.");
+  assert(J.blueprint.mode === "template" && J.blueprint.templateId === "luxury-editorial", `TEST 1: la joaillerie doit partir du template « Luxury Editorial », obtenu « ${J.blueprint.templateId} ».`);
 
-  /* ================= TEST 2 — GAMING AI (ORIGINAL, RADICALEMENT DIFFÉRENT) ================= */
+  /* ================= TEST 2 — GAMING AI (TEMPLATE IMMERSIVE-3D, RADICALEMENT DIFFÉRENT) ================= */
   const G = design("Create a gaming AI website");
   assert(/gaming|ia\b|ai\b/i.test(G.brief.industry) || /gaming/i.test(G.brief.instruction), `TEST 2: industrie gaming/IA non détectée (${G.brief.industry}).`);
   assert(G.brief.traits.technological >= .6 && G.brief.traits.dark >= .5, "TEST 2: traits technologique/sombre attendus.");
@@ -127,6 +148,7 @@ try {
   assert(styleRuntime.relativeLuminance(jewelryBg) !== styleRuntime.relativeLuminance(gamingBg), "TEST 2: les deux designs partagent le même fond.");
   assert(G.blueprint.visualStyle.typographyStack.display !== J.blueprint.visualStyle.typographyStack.display, "TEST 2: même typographie display que TEST 1 — interdit.");
   assert(G.blueprint.threeDElements.length >= 1, "TEST 2: un site gaming AI mérite une expérience 3D (WebGL).");
+  assert(G.blueprint.templateId === "immersive-3d", `TEST 2: le brief gaming devrait sélectionner « Immersive 3D », obtenu « ${G.blueprint.templateId} ».`);
   assert(J.blueprint.threeDElements.every((element) => /lent|douce|discret/i.test(`${element.concept} ${element.rationale}`)) || J.blueprint.threeDElements.length === 0 || /montre|produit|joaill/i.test(J.blueprint.industry), "TEST 1: la 3D joaillerie doit rester sobre.");
   const paletteSetJ = new Set(jewelryPalette);
   const sharedColors = G.blueprint.visualStyle.colors.filter((color) => paletteSetJ.has(color)).length;
@@ -140,9 +162,9 @@ try {
   /* ================= TEST 3 — TEMPLATE MODE : STRUCTURE GARDÉE, IDENTITÉ CHANGÉE ================= */
   const ecoBrief = briefRuntime.heuristicWebDesignBrief("Crée un site pour la marque de mode éco-responsable « Verveine »");
   const ranked = templateRuntime.rankTemplatesForBrief(ecoBrief);
-  assert(ranked.length === 3, `TEST 3: le top 3 templates est attendu, obtenu ${ranked.length}.`);
+  assert(ranked.length === 5, `TEST 3: la galerie V8.4 propose le top 5 templates, obtenu ${ranked.length}.`);
   assert(ranked[0].compatibility >= 60, `TEST 3: meilleure compatibilité trop faible (${ranked[0].compatibility}%).`);
-  assert(ranked[0].compatibility >= ranked[1].compatibility && ranked[1].compatibility >= ranked[2].compatibility, "TEST 3: les templates ne sont pas classés par compatibilité décroissante.");
+  assert(ranked[0].compatibility >= ranked[1].compatibility && ranked[1].compatibility >= ranked[2].compatibility && ranked[2].compatibility >= ranked[3].compatibility && ranked[3].compatibility >= ranked[4].compatibility, "TEST 3: les templates ne sont pas classés par compatibilité décroissante.");
   const chosen = templateRuntime.templateById(ranked[0].templateId);
   assert(chosen, "TEST 3: template introuvable par id.");
   const beforeSections = chosen.pages.flatMap((page) => page.sections.map((section) => section.name.toLowerCase()));
@@ -220,6 +242,12 @@ try {
   // Aperçu : iframe srcDoc côté UI.
   const uiPreview = previewRuntime.buildDesignPreviewHtml(qualifiedTemplate.blueprint);
   assert(uiPreview.includes("--bg") && uiPreview.includes(qualifiedTemplate.blueprint.conversion.primaryCta), "TEST 5: l'aperçu preview.ts n'expose pas la palette/CTA.");
+  assert(uiPreview.includes("SOPHENIC AI"), "V8.4 : chaque aperçu design doit porter la mention « SOPHENIC AI ».");
+  // V8.4 : aperçu COMPLET du template (toutes les pages navigables) pour la galerie.
+  const templatePreview = previewRuntime.buildTemplatePreviewHtml(chosen, "Verveine");
+  assert(templatePreview.includes("SOPHENIC AI"), "V8.4 : l'aperçu de template doit porter la mention « SOPHENIC AI ».");
+  for (const page of chosen.pages) assert(templatePreview.includes(page.name), `V8.4 : l'aperçu de template doit montrer la page « ${page.name} ».`);
+  assert(templatePreview.includes("showPage") && templatePreview.includes("data-page"), "V8.4 : l'aperçu de template doit être navigable (onglets).");
 
   /* ================= TEST 6 — ANTI-RÉPÉTITION ================= */
   const hotel = design("Crée un site de villa de luxe à Marrakech");
@@ -228,28 +256,32 @@ try {
     || a.blueprint.visualStyle.typographyStack.display !== b.blueprint.visualStyle.typographyStack.display
     || a.blueprint.pages.map((page) => page.name).join() !== b.blueprint.pages.map((page) => page.name).join();
   assert(distinct(J, G) && distinct(J, hotel) && distinct(G, hotel) && distinct(hotel, restaurant), "TEST 6: deux briefs différents produisent des designs identiques.");
-  assert(hotel.blueprint.pages.some((page) => /r[ée]serv/i.test(page.name)) || hotel.blueprint.pages.some((page) => /villa|chambre/i.test(page.name)), "TEST 6: la villa de luxe doit avoir une page réservation/villa.");
   assert(/sable|cuivre|dor/.test(hotel.blueprint.visualStyle.moodboardKeywords.join(" ")), "TEST 6: la direction « warm sand colors » attendue pour une villa à Marrakech.");
-  // Graine : même brief, graines différentes → espace de composition varié
-  // (au moins 3 compositions distinctes sur 5 graines).
+  // V8.4 : la galerie doit proposer un template d'hospitalité pour une villa
+  // (couverture sémantique du besoin, pas seulement du « luxe » générique).
+  const villaRanked = templateRuntime.rankTemplatesForBrief(hotel.brief);
+  assert(villaRanked.slice(0, 5).some((candidate) => ["warm-hospitality", "dark-mansion", "fine-dining", "artisan-cafe"].includes(candidate.templateId)), "TEST 6: le top 5 d'une villa de luxe doit contenir un template hospitality.");
+  // V8.4 : même brief, les 5 templates de la galerie → designs customisés
+  // distincts (au moins 3 sur 5) : l'utilisateur teste de VRAIES alternatives.
   const brandBrief = briefRuntime.heuristicWebDesignBrief("Crée un site pour une marque de café de spécialité");
-  const signatures = new Set();
-  for (const seed of [111, 999, 42, 777, 1234]) {
-    const cafe = agencyRuntime.runCreativeAgency(brandBrief, { seed }).blueprint;
-    signatures.add(JSON.stringify([cafe.visualStyle.colors, cafe.visualStyle.typographyStack.display, cafe.pages.map((page) => page.sections.map((section) => section.name))]));
+  const galleryRanked = templateRuntime.rankTemplatesForBrief(brandBrief);
+  const gallerySignatures = new Set();
+  for (const candidate of galleryRanked.slice(0, 5)) {
+    const galleryDesign = templateModeRuntime.customizeTemplate(templateRuntime.templateById(candidate.templateId), brandBrief, {});
+    gallerySignatures.add(JSON.stringify([galleryDesign.blueprint.visualStyle.colors, galleryDesign.blueprint.visualStyle.typographyStack.display, galleryDesign.blueprint.pages.map((page) => page.name)]));
   }
-  assert(signatures.size >= 3, `TEST 6: l'espace de variation par graine est trop pauvre (${signatures.size} composition(s) distincte(s) sur 5 graines).`);
+  assert(gallerySignatures.size >= 3, `TEST 6: la galerie est trop homogène (${gallerySignatures.size} design(s) distinct(s) sur 5 templates).`);
   // Le Brain brief : sans IA, l'heuristique reste honnête.
   const resolved = await briefRuntime.resolveWebDesignBrief({ instruction: "Create a luxury jewelry brand website" });
   assert(resolved.pages.length >= 3 && resolved.industry.length > 2, "TEST 6: resolveWebDesignBrief (sans IA) doit produire un brief complet.");
 
   console.log("SOPHENIC WEB DESIGN ENGINE — TESTS OBLIGATOIRES : OK");
-  console.log(`  TEST 1 Joaillerie luxe  : ${J.blueprint.pages.length} pages · « ${J.blueprint.visualStyle.typography} » · accent ${jewelryAccent} · qualité ${J.report.scores.overall}/100 · ${J.blueprint.agencyLog.length} agents`);
+  console.log(`  TEST 1 Joaillerie luxe  : template « ${J.blueprint.templateName} » · ${J.blueprint.pages.length} pages · « ${J.blueprint.visualStyle.typography} » · accent ${jewelryAccent} · qualité ${J.report.scores.overall}/100 · ${J.blueprint.agencyLog.length} agents`);
   console.log(`  TEST 2 Gaming IA       : fond ${gamingBg} (sombre) · « ${G.blueprint.visualStyle.typographyStack.display} » · ${G.blueprint.threeDElements.length} expérience(s) 3D · qualité ${G.report.scores.overall}/100 · 0 structure partagée avec TEST 1`);
   console.log(`  TEST 3 Template mode   : « ${chosen.name} » → ${Math.round(keptSections / beforeSections.length * 100)}% structure conservée · ${changedColors} couleurs remplacées · typo « ${customized.blueprint.visualStyle.typographyStack.display} » · qualité ${qualifiedTemplate.report.scores.overall}/100`);
   console.log(`  TEST 4 Qualité+Export  : dégradé ${badReport.scores.overall} → corrigé ${improved.report.scores.overall} · contraste AA ${styleRuntime.contrastRatio(improved.blueprint.visualStyle.colors[0], improved.blueprint.visualStyle.colors[1]).toFixed(2)}:1 · ZIP ${files.length} fichiers (design.json, preview, components…)`);
   console.log(`  TEST 5 Assets+Code     : ${assets.length} recommandations (image/icône/animation…) · handoff React · Next.js · Shopify · WordPress · HTML/CSS avec palette + pages`);
-  console.log(`  TEST 6 Anti-répétition : joaillerie ≠ gaming ≠ villa ≠ restaurant · 5 graines → plusieurs compositions distinctes · villa Marrakech « ${hotel.blueprint.visualStyle.moodboardKeywords.slice(0, 3).join(", ")} »`);
+  console.log(`  TEST 6 Anti-répétition : joaillerie ≠ gaming ≠ villa ≠ restaurant · galerie 5 templates → ${gallerySignatures.size} designs distincts · villa Marrakech « ${hotel.blueprint.visualStyle.moodboardKeywords.slice(0, 3).join(", ")} »`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

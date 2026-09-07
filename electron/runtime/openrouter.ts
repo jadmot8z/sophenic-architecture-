@@ -39,7 +39,8 @@ export type OpenRouterAccount = {
   usage?: number;
 };
 
-export type OpenRouterChatMessage = { role: "user" | "assistant"; content: string };
+export type OpenRouterDocumentAttachment = { name: string; mime: string; dataUrl: string };
+export type OpenRouterChatMessage = { role: "user" | "assistant"; content: string; images?: string[]; files?: OpenRouterDocumentAttachment[] };
 export type OpenRouterImage = { url: string; sourceUrl: string; title: string };
 export type OpenRouterUsage = { promptTokens?: number; completionTokens?: number; totalTokens?: number; costUsd?: number };
 export type OpenRouterChatResult = {
@@ -312,13 +313,24 @@ export async function listOpenRouterImageModels(force = false): Promise<OpenRout
 function compactHistory(messages: OpenRouterChatMessage[]): OpenRouterChatMessage[] {
   let remaining = HISTORY_CHAR_BUDGET;
   const selected: OpenRouterChatMessage[] = [];
+  // Image/document payloads are heavy: they are kept only on the most recent
+  // message carrying them so old attachments never inflate every request.
+  let attachmentsKept = false;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     const content = message.content.trim();
-    if (!content) continue;
+    const hasAttachments = Boolean(message.images?.length || message.files?.length);
+    if (!content && !hasAttachments) continue;
+    const keepAttachments = hasAttachments && !attachmentsKept;
     const take = Math.min(content.length, remaining);
-    if (take <= 0) break;
-    selected.push({ role: message.role, content: content.slice(content.length - take) });
+    if (take <= 0 && !keepAttachments) break;
+    const kept: OpenRouterChatMessage = { role: message.role, content: take > 0 ? content.slice(content.length - take) : "" };
+    if (keepAttachments) {
+      if (message.images?.length) kept.images = message.images;
+      if (message.files?.length) kept.files = message.files;
+      attachmentsKept = true;
+    }
+    selected.push(kept);
     remaining -= take;
   }
   return selected.reverse();

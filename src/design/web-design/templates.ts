@@ -281,6 +281,538 @@ export const WEB_DESIGN_TEMPLATES: WebDesignTemplate[] = [
       { breakpoint: "≤480px", rule: "CTA RDV sticky" }
     ],
     animations: ["respiration", "reveal doux", "transition nature"]
+  },
+  {
+    id: "dark-mansion",
+    name: "Mansion Sombre",
+    tagline: "Immobilier d'exception, cinématique sombre, or discret",
+    industries: ["immobilier", "villa", "propriete", "propriété", "mansion", "estate", "residence", "résidence", "location de luxe"],
+    traits: { luxury: .9, dark: .8, editorial: .7, storytelling: .8, minimal: .4 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero vidéo sombre plein écran", purpose: "immersion patrimoniale" },
+        { name: "Propriétés phares", purpose: "3 biens signature" },
+        { name: "Services de conciergerie", purpose: "offre premium" },
+        { name: "Témoignages de propriétaires", purpose: "confiance" },
+        { name: "CTA visite privée", purpose: "conversion" }
+      ] },
+      { name: "Propriétés", sections: [
+        { name: "Grille de propriétés", purpose: "parcours des biens" },
+        { name: "Filtres (lieu, surface, budget)", purpose: "navigation" },
+        { name: "Bien vedette", purpose: "coup de cœur" }
+      ] },
+      { name: "Services", sections: [{ name: "Gestion & conciergerie", purpose: "service continu" }] },
+      { name: "Visite privée", sections: [{ name: "Formulaire discret", purpose: "conversion" }] }
+    ],
+    visualStyle: { colors: ["#12100D", "#F2EAD9", "#C89B5A", "#8A7B66", "#1E1A15"], typography: "Cormorant Garamond (titres) + Karla (texte)", typographyStack: { display: "Cormorant Garamond", body: "Karla" }, spacing: "Système 8pt somptueux, marges 110px, images plein bord", animations: ["parallaxe cinématique", "fondu noir entre sections", "hover image → zoom lent 1.06", "compteurs de surfaces"], imagery: "Villas au crépuscule, droneshots, intérieurs éclairés à la bougie", moodboardKeywords: ["nuit", "cuivre", "pierre", "prestige"] },
+    components: [
+      { name: "Navigation", variant: "transparente sur hero", description: "Fine, blanche, devient sombre au scroll", pages: ["*"] },
+      { name: "Carte propriété", variant: "image + prix discret", description: "Photo large, prix en petit, hover → galerie", pages: ["Propriétés"] },
+      { name: "Bandeau chiffres", variant: "compteurs", description: "Surfaces, biens, pays", pages: ["Accueil"] },
+      { name: "Footer", variant: "or sur noir", description: "Contact, réseaux, mentions", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "grille 12 col, hero vidéo muted" },
+      { breakpoint: "≤768px", rule: "filtres en tiroir, cartes empilées" },
+      { breakpoint: "≤480px", rule: "CTA visite sticky" }
+    ],
+    animations: ["parallaxe cinématique", "fondu noir", "zoom lent hover", "compteurs"]
+  },
+  {
+    id: "fashion-lookbook",
+    name: "Fashion Lookbook",
+    tagline: "Mode plein cadre, défilement horizontal, audace éditoriale",
+    industries: ["mode", "fashion", "lookbook", "streetwear", "collection", "defile", "défilé", "pret-a-porter", "prêt-à-porter"],
+    traits: { editorial: .9, colorful: .4, dark: .4, luxury: .5, playful: .4 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Lookbook hero plein écran", purpose: "identité de saison" },
+        { name: "Nouvelle collection", purpose: "nouveautés" },
+        { name: "Éditorial de marque", purpose: "univers" },
+        { name: "Feed Instagram", purpose: "preuve sociale" },
+        { name: "Newsletter drop", purpose: "rétention" }
+      ] },
+      { name: "Collection", sections: [{ name: "Grille produits éditoriale", purpose: "parcours shopping" }, { name: "Pièces iconiques", purpose: "désir" }] },
+      { name: "Lookbook", sections: [{ name: "Défilement horizontal", purpose: "immersion saison" }] },
+      { name: "Marque", sections: [{ name: "Manifeste", purpose: "posture" }] }
+    ],
+    visualStyle: { colors: ["#F4F2EE", "#141414", "#B0413E", "#8C8C86", "#E9E5DE"], typography: "Archivo Expanded (titres) + Karla (texte)", typographyStack: { display: "Archivo Expanded", body: "Karla" }, spacing: "Système 8pt éditorial, typographie 9vw", animations: ["défilement horizontal du lookbook", "hover produit → second visuel", "texte marquee", "transitions blanc/noir"], imagery: "Lookbook studio, plein pied, éclairage graphique", moodboardKeywords: ["studio", "rouge signal", "plein pied", "tissu"] },
+    components: [
+      { name: "Navigation", variant: "centre minimalist", description: "Logo centré, liens fins", pages: ["*"] },
+      { name: "Carte produit", variant: "double visuel", description: "Deux images, swap au hover, taille rapide", pages: ["Collection"] },
+      { name: "Lookbook scroller", variant: "horizontal", description: "Série plein écran, drag/scroll", pages: ["Lookbook"] },
+      { name: "Footer", variant: "marquee", description: "Email géant + réseaux", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "lookbook horizontal au drag" },
+      { breakpoint: "≤768px", rule: "lookbook vertical, grille 2 col" },
+      { breakpoint: "≤480px", rule: "tailles en sticky bottom" }
+    ],
+    animations: ["scroll horizontal", "swap visuel hover", "marquee", "transitions contrastées"]
+  },
+  {
+    id: "saas-product",
+    name: "SaaS Product",
+    tagline: "Clarté produit, captures animées, conversion par l'essai",
+    industries: ["saas", "logiciel", "application", "startup", "dashboard", "abonnement", "outil", "plateforme", "produit"],
+    traits: { minimal: .7, corporate: .4, technological: .6, colorful: .3 },
+    pages: [
+      { name: "Home", sections: [
+        { name: "Hero produit + démo", purpose: "promesse en 5 secondes" },
+        { name: "Fonctionnalités clés", purpose: "valeur" },
+        { name: "Captures & workflow", purpose: "preuve visuelle" },
+        { name: "Tarifs", purpose: "décision" },
+        { name: "FAQ", purpose: "objections" },
+        { name: "CTA essai gratuit", purpose: "conversion" }
+      ] },
+      { name: "Fonctionnalités", sections: [{ name: "Détail par module", purpose: "profondeur" }] },
+      { name: "Tarifs", sections: [{ name: "3 plans + comparatif", purpose: "conversion" }] },
+      { name: "Docs", sections: [{ name: "Démarrage rapide", purpose: "activation" }] }
+    ],
+    visualStyle: { colors: ["#FFFFFF", "#0F172A", "#4F46E5", "#64748B", "#F1F5F9"], typography: "Sora (titres) + Inter (texte)", typographyStack: { display: "Sora", body: "Inter" }, spacing: "Système 8pt, cartes ombrées légères, radius 14px", animations: ["démo produit animée", "apparition au scroll", "hover lift des cartes", "toggle pricing mensuel/annuel"], imagery: "Captures d'interface nettes, schémas de workflow, avatars clients", moodboardKeywords: ["indigo", "interface", "grille", "efficacité"] },
+    components: [
+      { name: "Navigation", variant: "sticky + CTA", description: "Liens produit, pricing, essai gratuit", pages: ["*"] },
+      { name: "Hero démo", variant: "capture animée", description: "Titre + capture qui défile seule", pages: ["Home"] },
+      { name: "Tableau tarifs", variant: "toggle", description: "Mensuel/annuel animé, plan mis en avant", pages: ["Tarifs", "Home"] },
+      { name: "Footer", variant: "colonnes", description: "Produit, société, légal, status", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "conteneur 1180px" },
+      { breakpoint: "≤768px", rule: "tarifs en cartes empilées" },
+      { breakpoint: "≤480px", rule: "CTA essai sticky" }
+    ],
+    animations: ["démo animée", "reveal scroll", "hover lift", "toggle pricing"]
+  },
+  {
+    id: "crypto-web3",
+    name: "Crypto Web3",
+    tagline: "Orbe 3D, néons, tokenomics et communaut",
+    industries: ["crypto", "web3", "nft", "blockchain", "token", "defi", "metaverse", "métaverse", "wallet"],
+    traits: { immersive3d: .85, technological: .9, dark: .95, colorful: .5, playful: .4 },
+    pages: [
+      { name: "Home", sections: [
+        { name: "Hero orbe 3D", purpose: "wow technologique" },
+        { name: "Écosystème", purpose: "composabilité" },
+        { name: "Tokenomics", purpose: "modèle économique" },
+        { name: "Roadmap", purpose: "vision" },
+        { name: "Communauté", purpose: "appartenance" },
+        { name: "CTA join", purpose: "conversion" }
+      ] },
+      { name: "Écosystème", sections: [{ name: "Protocoles liés", purpose: "cartographie" }] },
+      { name: "Tokenomics", sections: [{ name: "Répartition animée", purpose: "transparence" }] },
+      { name: "Docs", sections: [{ name: "Whitepaper & guides", purpose: "crédibilité" }] }
+    ],
+    visualStyle: { colors: ["#07080F", "#EAF0FF", "#7C5CFF", "#00D1FF", "#12131F"], typography: "Unbounded (titres) + IBM Plex Mono (données)", typographyStack: { display: "Unbounded", body: "IBM Plex Mono" }, spacing: "Système 8pt néon, cartes glass sur fond profond", animations: ["orbe 3D en rotation", "compteurs de supply", "glitch du titre", "gradient animé des accents"], imagery: "Rendus 3D de tokens, graphes lumineux, captures d'onchain", moodboardKeywords: ["violet", "cyan", "orbite", "onchain"] },
+    components: [
+      { name: "Navigation", variant: "pill glassmorphism", description: "Flottante, blur, bouton Launch App", pages: ["*"] },
+      { name: "Hero 3D", variant: "canvas WebGL", description: "Orbe réactif, ticker live", pages: ["Home"] },
+      { name: "Donut tokenomics", variant: "animé", description: "Répartition par tranche, légende mono", pages: ["Tokenomics"] },
+      { name: "Footer", variant: "liens + status", description: "Écosystème, docs, réseaux", pages: ["*"] }
+    ],
+    threeDElements: [{ concept: "Orbe/token 3D signature réactif à la souris", library: "Three.js / React Three Fiber", placement: "Hero Home", rationale: "incarnation visuelle du protocole" }],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "canvas plein écran, DPR ≤ 2" },
+      { breakpoint: "≤768px", rule: "orbe simplifié, ticker réduit" },
+      { breakpoint: "≤480px", rule: "CTA join sticky" }
+    ],
+    animations: ["orbe 3D", "compteurs", "glitch", "gradient animé"]
+  },
+  {
+    id: "fine-dining",
+    name: "Fine Dining",
+    tagline: "Gastronomie étoilée, noir & or, menu dégustation",
+    industries: ["gastronomique", "étoile", "etoile", "restaurant gastronomique", "chef", "gastronomie", "degustation", "dégustation"],
+    traits: { luxury: .8, dark: .7, editorial: .7, storytelling: .8 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero plat signature", purpose: "excellence immédiate" },
+        { name: "Le chef", purpose: "auteur" },
+        { name: "Menu dégustation", purpose: "offre" },
+        { name: "Distinctions", purpose: "preuve" },
+        { name: "Réservation", purpose: "conversion" }
+      ] },
+      { name: "Menu", sections: [{ name: "Dégustation & cartes", purpose: "décision" }] },
+      { name: "Le chef", sections: [{ name: "Parcours", purpose: "récit" }] },
+      { name: "Réserver", sections: [{ name: "Module réservation", purpose: "conversion" }] }
+    ],
+    visualStyle: { colors: ["#14100C", "#F5EFE4", "#C9A961", "#8A7B66", "#201A13"], typography: "Playfair Display (titres) + Source Sans 3 (texte)", typographyStack: { display: "Playfair Display", body: "Source Sans 3" }, spacing: "Système 8pt cérémonieux, marges profondes, filets or", animations: ["reveal lent (1.1s)", "zoom plat signature (10s)", "accordéon de menu élégant", "survol or discret"], imagery: "Plats en lumière rasante, mains du chef, noir profond", moodboardKeywords: ["or", "nuit", "fur et plume", "étoile"] },
+    components: [
+      { name: "Navigation", variant: "centrée fine", description: "Liens espacés, filet or", pages: ["*"] },
+      { name: "Menu accordéon", variant: "dégustation", description: "Temps par temps, prix alignés", pages: ["Menu"] },
+      { name: "Module réservation", variant: "service & couverts", description: "Service, couverts, occasion", pages: ["Réserver", "Accueil"] },
+      { name: "Footer", variant: "or sur noir", description: "Adresse, horaires, press", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "hero image 21:9" },
+      { breakpoint: "≤768px", rule: "menu en accordéon natif" },
+      { breakpoint: "≤480px", rule: "réserver sticky" }
+    ],
+    animations: ["reveal lent", "zoom signature", "accordéon élégant", "survol or"]
+  },
+  {
+    id: "artisan-cafe",
+    name: "Café Artisan",
+    tagline: "Torréfaction chaleureuse, origines, abonnement grains",
+    industries: ["café", "cafe", "coffee", "torréfacteur", "torrefacteur", "boulangerie", "brunch", "pâtisserie", "patisserie"],
+    traits: { storytelling: .8, colorful: .5, playful: .4, dark: .25, minimal: .3 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero chaleureux", purpose: "odeur du café" },
+        { name: "Nos cafés du moment", purpose: "offre" },
+        { name: "Méthode de torréfaction", purpose: "savoir-faire" },
+        { name: "Avis de clients", purpose: "confiance" },
+        { name: "Venir nous voir", purpose: "conversion" }
+      ] },
+      { name: "Carte", sections: [{ name: "Boissons & pâtisseries", purpose: "décision" }] },
+      { name: "Origines", sections: [{ name: "Fermes & profils", purpose: "traçabilité" }] },
+      { name: "Abonnement", sections: [{ name: "Grains chaque mois", purpose: "récurrence" }] }
+    ],
+    visualStyle: { colors: ["#FBF6EE", "#2E2118", "#B4632A", "#7A6A55", "#F0E6D6"], typography: "Fraunces (titres) + Nunito Sans (texte)", typographyStack: { display: "Fraunces", body: "Nunito Sans" }, spacing: "Système 8pt chaleureux, arrondis 18px, textures papier", animations: ["reveal doux", "hover carte → lift", "marquee des origines", "carrousel des grains"], imagery: "Grains, vapeur, mains du barista, lumière de matin", moodboardKeywords: ["brun", "creme", "crème", "vapeur", "craft"] },
+    components: [
+      { name: "Navigation", variant: "sticky crème", description: "Logo + carte + abonnement", pages: ["*"] },
+      { name: "Carte café", variant: "profil de goût", description: "Notes, origine, intensité", pages: ["Accueil", "Origines"] },
+      { name: "Abonnement", variant: "3 formules", description: "Fréquence + mouture", pages: ["Abonnement"] },
+      { name: "Footer", variant: "horaires + plan", description: "Adresse, horaires, réseaux", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "hero image 16:9" },
+      { breakpoint: "≤768px", rule: "carte en accordéon" },
+      { breakpoint: "≤480px", rule: "abonnement sticky" }
+    ],
+    animations: ["reveal doux", "lift hover", "marquee origines", "carrousel grains"]
+  },
+  {
+    id: "bold-agency",
+    name: "Bold Agency",
+    tagline: "Agence audacieuse, typo XXL, études de cas percutantes",
+    industries: ["agence", "branding", "marketing", "publicite", "publicité", "studio créatif", "studio creatif", "agence digitale", "communication"],
+    traits: { playful: .8, colorful: .7, editorial: .7, dark: .5 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero typographique XXL", purpose: "posture" },
+        { name: "Services", purpose: "offre" },
+        { name: "Études de cas", purpose: "preuve" },
+        { name: "Chiffres d'impact", purpose: "crédibilité" },
+        { name: "CTA projet", purpose: "conversion" }
+      ] },
+      { name: "Services", sections: [{ name: "Brand / Digital / Content", purpose: "détail" }] },
+      { name: "Projets", sections: [{ name: "Grille expérimentale", purpose: "portfolio" }] },
+      { name: "Studio", sections: [{ name: "Équipe & culture", purpose: "proximité" }] }
+    ],
+    visualStyle: { colors: ["#0E0E0E", "#F5F5F0", "#2E4BFF", "#FF5C28", "#1A1A1A"], typography: "Syne (titres) + Space Grotesk (texte)", typographyStack: { display: "Syne", body: "Space Grotesk" }, spacing: "Système libre, asymétries, typographie 12vw", animations: ["curseur personnalisé", "texte marquee", "transitions de page", "survol déformation"], imagery: "Visuels de campagnes, collages, textures brutales", moodboardKeywords: ["bleu électrique", "orange signal", "grain", "audace"] },
+    components: [
+      { name: "Navigation", variant: "index latéral", description: "Liens + horloge locale", pages: ["*"] },
+      { name: "Étude de cas", variant: "plein cadre", description: "Image XXL, résultat chiffré", pages: ["Projets", "Accueil"] },
+      { name: "Marquee services", variant: "défilé", description: "Compétences en boucle", pages: ["Accueil"] },
+      { name: "Footer", variant: "email géant", description: "Contact XXL, réseaux", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "typo display 12vw" },
+      { breakpoint: "≤768px", rule: "grille projets 1 col" },
+      { breakpoint: "≤480px", rule: "curseur custom off" }
+    ],
+    animations: ["curseur custom", "marquee", "transitions", "déformation hover"]
+  },
+  {
+    id: "fullscreen-photography",
+    name: "Fullscreen Photography",
+    tagline: "Photographie plein cadre, diaporamas lents, séries",
+    industries: ["photographe", "photographie", "photo", "shooting", "mariage", "portrait", "reportage"],
+    traits: { minimal: .8, editorial: .8, dark: .6, luxury: .4 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero diaporama plein écran", purpose: "oeuvre immédiate" },
+        { name: "Séries remarquables", purpose: "corpus" },
+        { name: "À propos", purpose: "regard" },
+        { name: "Contact", purpose: "conversion" }
+      ] },
+      { name: "Séries", sections: [{ name: "Galeries par projet", purpose: "exploration" }] },
+      { name: "Expositions", sections: [{ name: "Passé & à venir", purpose: "notoriété" }] },
+      { name: "Print shop", sections: [{ name: "Tirages en vente", purpose: "revenu" }] }
+    ],
+    visualStyle: { colors: ["#0B0B0B", "#F5F5F2", "#D9C9A3", "#9A9A90", "#161616"], typography: "Playfair Display (titres) + Inter (texte)", typographyStack: { display: "Playfair Display", body: "Inter" }, spacing: "Système 8pt galerie, images bord à bord, légendes discrètes", animations: ["diaporama lent (6s)", "fondu plein écran", "hover → infos photo", "scroll horizontal des galeries"], imagery: "Photographies d'auteur, noir profond, lumière naturelle", moodboardKeywords: ["noir", "argentique", "silence", "cadrage"] },
+    components: [
+      { name: "Navigation", variant: "minimale", description: "Prénom + menu, disparaît au scroll", pages: ["*"] },
+      { name: "Diaporama", variant: "plein écran", description: "Crossfade, légendes serif", pages: ["Accueil"] },
+      { name: "Galerie", variant: "masonry", description: "Grille asymétrique, lightbox", pages: ["Séries"] },
+      { name: "Footer", variant: "discret", description: "Contact, droits, Instagram", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "diaporama plein écran" },
+      { breakpoint: "≤768px", rule: "masonry 2 col, swipe" },
+      { breakpoint: "≤480px", rule: "légendes sous image" }
+    ],
+    animations: ["crossfade", "diaporama lent", "hover infos", "scroll horizontal"]
+  },
+  {
+    id: "swiss-architecture",
+    name: "Swiss Architecture",
+    tagline: "Grille suisse, projets rigoureux, plans et surfaces",
+    industries: ["architecte", "architecture", "urbanisme", "agence d'architecture", "paysagiste", "construction", "maitrise d'oeuvre", "maîtrise d'œuvre"],
+    traits: { minimal: .9, corporate: .5, dark: .2, editorial: .5 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero projet phare", purpose: "exactitude" },
+        { name: "Projets sélectionnés", purpose: "corpus" },
+        { name: "Approche", purpose: "méthode" },
+        { name: "Équipe", purpose: "humain" },
+        { name: "CTA contact", purpose: "conversion" }
+      ] },
+      { name: "Projets", sections: [{ name: "Index par année", purpose: "archive" }, { name: "Fiches projets", purpose: "détail" }] },
+      { name: "Approche", sections: [{ name: "Processus", purpose: "méthode" }] },
+      { name: "Publications", sections: [{ name: "Presse & prix", purpose: "notoriété" }] }
+    ],
+    visualStyle: { colors: ["#FFFFFF", "#111111", "#E4572E", "#757575", "#F2F2F2"], typography: "Libre Franklin (titres) + Inter (texte)", typographyStack: { display: "Libre Franklin", body: "Inter" }, spacing: "Grille suisse stricte, 12 col, interlignage ouvert", animations: ["grille qui se révèle", "hover → plan technique", "compteurs de surfaces", "scroll snap projets"], imagery: "Photographie d'architecture, plans, maquettes blanches", moodboardKeywords: ["blanc", "plan", "béton", "grille"] },
+    components: [
+      { name: "Navigation", variant: "grille", description: "Liens monospace, index numéroté", pages: ["*"] },
+      { name: "Fiche projet", variant: "plan + photos", description: "Surface, année, lieu, programme", pages: ["Projets"] },
+      { name: "Index", variant: "liste", description: "Années, programme, lieu", pages: ["Projets"] },
+      { name: "Footer", variant: "minimal", description: "Adresse, CV, contact", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "grille 12 col stricte" },
+      { breakpoint: "≤768px", rule: "index en accordéon" },
+      { breakpoint: "≤480px", rule: "fiches empilées" }
+    ],
+    animations: ["reveal grille", "hover plan", "compteurs", "scroll snap"]
+  },
+  {
+    id: "prestige-law",
+    name: "Prestige Law",
+    tagline: "Cabinet d'avocats, sérénité institutionnelle, expertise",
+    industries: ["avocat", "droit", "juridique", "notaire", "cabinet", "conseil juridique", "barreau"],
+    traits: { corporate: .9, luxury: .5, minimal: .6, dark: .3 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero institutionnel", purpose: "autorité" },
+        { name: "Domaines d'expertise", purpose: "offre" },
+        { name: "Notoriété & résultats", purpose: "preuve" },
+        { name: "Équipe", purpose: "talents" },
+        { name: "CTA rendez-vous", purpose: "conversion" }
+      ] },
+      { name: "Domaines", sections: [{ name: "Droit des affaires, famille…", purpose: "profondeur" }] },
+      { name: "Équipe", sections: [{ name: "Associés & collaborateurs", purpose: "confiance" }] },
+      { name: "Insights", sections: [{ name: "Analyses juridiques", purpose: "autorité" }] }
+    ],
+    visualStyle: { colors: ["#FFFFFF", "#0B1B2B", "#9A7B4F", "#42586E", "#F4F1EA"], typography: "Source Serif 4 (titres) + Inter (texte)", typographyStack: { display: "Source Serif 4", body: "Inter" }, spacing: "Système 8pt institutionnel, sections délimitées, filets fins", animations: ["apparition sobre (250ms)", "compteurs d'affaires", "méga-menu animé", "hover filet doré"], imagery: "Portraits en costume, palais de justice, bibliothèques", moodboardKeywords: ["bleu nuit", "or discret", "marbre", "érudition"] },
+    components: [
+      { name: "Navigation", variant: "méga-menu", description: "Domaines déroulants, CTA rendez-vous", pages: ["*"] },
+      { name: "Fiche avocat", variant: "portrait + titres", description: "Photo, barreaux, spécialités", pages: ["Équipe"] },
+      { name: "Bandeau résultats", variant: "compteurs", description: "Affaires, années, distinctions", pages: ["Accueil"] },
+      { name: "Footer", variant: "institutionnel", description: "Mentions, barreau, contact", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "conteneur 1120px" },
+      { breakpoint: "≤768px", rule: "méga-menu → accordéon" },
+      { breakpoint: "≤480px", rule: "CTA rendez-vous sticky" }
+    ],
+    animations: ["apparition sobre", "compteurs", "méga-menu", "hover filet"]
+  },
+  {
+    id: "medical-care",
+    name: "Medical Care",
+    tagline: "Clinique rassurante, parcours patient clair, rendez-vous simple",
+    industries: ["clinique", "medecin", "médecin", "dentiste", "hopital", "hôpital", "cabinet medical", "cabinet médical", "soins", "sante", "santé"],
+    traits: { minimal: .8, corporate: .4, colorful: .2, dark: .05 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero rassurant", purpose: "confiance immédiate" },
+        { name: "Spécialités", purpose: "offre de soins" },
+        { name: "Équipe médicale", purpose: "réassurance" },
+        { name: "Parcours patient", purpose: "simplicité" },
+        { name: "CTA rendez-vous", purpose: "conversion" }
+      ] },
+      { name: "Spécialités", sections: [{ name: "Par pratique", purpose: "navigation" }] },
+      { name: "Médecins", sections: [{ name: "Praticiens & créneaux", purpose: "choix" }] },
+      { name: "Rendez-vous", sections: [{ name: "Module RDV en ligne", purpose: "conversion" }] }
+    ],
+    visualStyle: { colors: ["#FFFFFF", "#12324F", "#1F7A8C", "#6B7B8C", "#EFF6F8"], typography: "Libre Franklin (titres) + Karla (texte)", typographyStack: { display: "Libre Franklin", body: "Karla" }, spacing: "Système 8pt aéré, arrondis 20px, blancs apaisants", animations: ["apparition douce", "module RDV en 2 étapes", "badges de confiance", "hover carte spécialité"], imagery: "Praticiens souriants, salles lumineuses, schémas anatomiques doux", moodboardKeywords: ["bleu ciel", "blanc", "calme", "soin"] },
+    components: [
+      { name: "Navigation", variant: "sticky claire", description: "Spécialités, médecins, RDV", pages: ["*"] },
+      { name: "Module RDV", variant: "2 étapes", description: "Spécialité puis créneau", pages: ["Rendez-vous", "Accueil"] },
+      { name: "Carte spécialité", variant: "icône + lien", description: "Icône linéaire, titre, flèche", pages: ["Spécialités"] },
+      { name: "Footer", variant: "infos pratiques", description: "Accès, horaires, urgences", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "conteneur 1100px" },
+      { breakpoint: "≤768px", rule: "spécialités en carrousel" },
+      { breakpoint: "≤480px", rule: "bouton RDV sticky, appel 1-tap" }
+    ],
+    animations: ["apparition douce", "RDV 2 étapes", "badges", "hover spécialité"]
+  },
+  {
+    id: "academy-learning",
+    name: "Academy Learning",
+    tagline: "Formation engageante, catalogue clair, progression visible",
+    industries: ["formation", "cours", "academie", "académie", "e-learning", "ecole", "école", "coaching", "certification", "apprentissage"],
+    traits: { colorful: .6, playful: .5, minimal: .5, storytelling: .4 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero apprenants", purpose: "projection" },
+        { name: "Catalogue de cours", purpose: "offre" },
+        { name: "Formateurs", purpose: "crédibilité" },
+        { name: "Témoignages de réussite", purpose: "preuve" },
+        { name: "CTA inscription", purpose: "conversion" }
+      ] },
+      { name: "Catalogue", sections: [{ name: "Cours par domaine", purpose: "navigation" }, { name: "Parcours certifiants", purpose: "valeur" }] },
+      { name: "Formateurs", sections: [{ name: "Enseignants", purpose: "confiance" }] },
+      { name: "Tarifs", sections: [{ name: "Formules & financement", purpose: "décision" }] }
+    ],
+    visualStyle: { colors: ["#FFFBF2", "#1F2937", "#F59E0B", "#6B7280", "#FDF3E3"], typography: "Sora (titres) + Karla (texte)", typographyStack: { display: "Sora", body: "Karla" }, spacing: "Système 8pt énergique, cartes arrondies 16px", animations: ["barres de progression animées", "hover carte cours", "compteur d'apprenants", "badges certification"], imagery: "Apprenants en action, captures de cours, badges", moodboardKeywords: ["ambre", "papier", "progression", "énergie"] },
+    components: [
+      { name: "Navigation", variant: "sticky + recherche", description: "Catalogue, tarifs, connexion", pages: ["*"] },
+      { name: "Carte cours", variant: "progression", description: "Durée, niveau, progression", pages: ["Catalogue", "Accueil"] },
+      { name: "Témoignage", variant: "avant/après", description: "Rôle avant → après la formation", pages: ["Accueil"] },
+      { name: "Footer", variant: "colonnes", description: "Catalogue, aide, légal", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "grille cours 3 col" },
+      { breakpoint: "≤768px", rule: "catalogue en carrousel" },
+      { breakpoint: "≤480px", rule: "CTA inscription sticky" }
+    ],
+    animations: ["progression", "hover cours", "compteurs", "badges"]
+  },
+  {
+    id: "impact-nonprofit",
+    name: "Impact Nonprofit",
+    tagline: "ONG humaine, impact chiffré, don fluide",
+    industries: ["ong", "association", "humanitaire", "caritatif", "don", "donation", "environnement", "solidarite", "solidarité"],
+    traits: { storytelling: .9, colorful: .6, editorial: .6, playful: .3 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero mission", purpose: "émotion" },
+        { name: "Impact chiffré", purpose: "preuve" },
+        { name: "Programmes", purpose: "action" },
+        { name: "Témoignages de terrain", purpose: "proximité" },
+        { name: "Faire un don", purpose: "conversion" }
+      ] },
+      { name: "Programmes", sections: [{ name: "Par mission", purpose: "détail" }] },
+      { name: "Impact", sections: [{ name: "Rapports & transparence", purpose: "confiance" }] },
+      { name: "Devenir bénévole", sections: [{ name: "Rejoindre", purpose: "engagement" }] }
+    ],
+    visualStyle: { colors: ["#FAF7F0", "#20301F", "#3E7C4F", "#7A8B6F", "#EDF2E6"], typography: "Lora (titres) + Karla (texte)", typographyStack: { display: "Lora", body: "Karla" }, spacing: "Système 8pt humain, arrondis 18px, photos bord à bord", animations: ["compteurs d'impact", "reveal photo/récit", "barre de dons animée", "hover programme"], imagery: "Portraits de terrain, mains, paysages vivants", moodboardKeywords: ["vert", "terre", "main", "espoir"] },
+    components: [
+      { name: "Navigation", variant: "mission", description: "Programmes, impact, don", pages: ["*"] },
+      { name: "Module don", variant: "montants suggérés", description: "3 montants + libre, mensuel", pages: ["Accueil"] },
+      { name: "Compteur d'impact", variant: "animé", description: "Bénéficiaires, programmes, pays", pages: ["Accueil", "Impact"] },
+      { name: "Footer", variant: "transparence", description: "Rapports, contacts, réseaux", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "conteneur 1140px" },
+      { breakpoint: "≤768px", rule: "programmes en carrousel" },
+      { breakpoint: "≤480px", rule: "bouton don sticky" }
+    ],
+    animations: ["compteurs", "reveal récit", "barre dons", "hover programme"]
+  },
+  {
+    id: "festival-energy",
+    name: "Festival Energy",
+    tagline: "Line-up électrique, billetterie nerveuse, couleurs néon",
+    industries: ["festival", "evenement", "événement", "concert", "billetterie", "billet", "expo", "soiree", "soirée", "culture"],
+    traits: { playful: .9, colorful: .9, dark: .5, immersive3d: .3 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero line-up animé", purpose: "excitation" },
+        { name: "Programme", purpose: "line-up complet" },
+        { name: "Artistes à venir", purpose: "teasing" },
+        { name: "Billeterie", purpose: "conversion" },
+        { name: "Infos pratiques", purpose: "logistique" }
+      ] },
+      { name: "Programme", sections: [{ name: "Par jour & scène", purpose: "navigation" }] },
+      { name: "Artistes", sections: [{ name: "Grille d'artistes", purpose: "découverte" }] },
+      { name: "Billeterie", sections: [{ name: "Formules & pass", purpose: "conversion" }] }
+    ],
+    visualStyle: { colors: ["#12081F", "#FFF8E7", "#FF2E88", "#7C5CFF", "#1D0F33"], typography: "Unbounded (titres) + Space Grotesk (texte)", typographyStack: { display: "Unbounded", body: "Space Grotesk" }, spacing: "Système 8pt électrique, diagonales, néon", animations: ["line-up animé lettre par lettre", "billets en tilt 3D", "marquee des dates", "confettis au clic billetterie"], imagery: "Foules éclairées, scènes néon, portraits d'artistes", moodboardKeywords: ["néon rose", "violet", "stroboscope", "été"] },
+    components: [
+      { name: "Navigation", variant: "compteur jours", description: "J-XX avant l'ouverture, billets", pages: ["*"] },
+      { name: "Carte artiste", variant: "néon", description: "Photo, scène, heure, hover glow", pages: ["Artistes", "Programme"] },
+      { name: "Billet", variant: "tilt 3D", description: "Pass holographique, prix, ajouter", pages: ["Billeterie"] },
+      { name: "Footer", variant: "partenaires", description: "Sponsors, contact, réseaux", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "programme en grille horaire" },
+      { breakpoint: "≤768px", rule: "programme par jour, swipe" },
+      { breakpoint: "≤480px", rule: "billeterie sticky" }
+    ],
+    animations: ["line-up animé", "tilt 3D billet", "marquee", "confettis"]
+  },
+  {
+    id: "podcast-studio",
+    name: "Podcast Studio",
+    tagline: "Épisodes en avant, lecteur intégré, abonnement simple",
+    industries: ["podcast", "emission", "émission", "radio", "media", "média", "magazine", "newsletter", "blog", "edition", "édition"],
+    traits: { storytelling: .7, editorial: .8, colorful: .4, dark: .5 },
+    pages: [
+      { name: "Accueil", sections: [
+        { name: "Hero dernier épisode", purpose: "écoute immédiate" },
+        { name: "Derniers épisodes", purpose: "catalogue" },
+        { name: "Hôtes & invités", purpose: "proximité" },
+        { name: "S'abonner", purpose: "conversion" }
+      ] },
+      { name: "Épisodes", sections: [{ name: "Liste + lecteur", purpose: "écoute" }, { name: "Par thème", purpose: "navigation" }] },
+      { name: "Hôtes", sections: [{ name: "Présentateurs", purpose: "visibilité" }] },
+      { name: "Articles", sections: [{ name: "Notes & transcriptions", purpose: "profondeur" }] }
+    ],
+    visualStyle: { colors: ["#17110E", "#F7EFE6", "#E0533D", "#9C8B7A", "#241B15"], typography: "Fraunces (titres) + Work Sans (texte)", typographyStack: { display: "Fraunces", body: "Work Sans" }, spacing: "Système 8pt studio, grandes jaquettes, interlignage aéré", animations: ["waveform animée du lecteur", "lecteur sticky", "hover épisode → play", "apparition douce"], imagery: "Jaquettes d'épisodes, micros, portraits d'hôtes", moodboardKeywords: ["terracotta", "son", "studio", "voix"] },
+    components: [
+      { name: "Navigation", variant: "studio", description: "Épisodes, hôtes, abonnement", pages: ["*"] },
+      { name: "Lecteur", variant: "sticky", description: "Waveform, vitesse, partage", pages: ["*"] },
+      { name: "Carte épisode", variant: "jaquette + play", description: "Durée, date, invité", pages: ["Accueil", "Épisodes"] },
+      { name: "Footer", variant: "plateformes", description: "Apple, Spotify, YouTube, RSS", pages: ["*"] }
+    ],
+    threeDElements: [],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "liste épisodes 2 col" },
+      { breakpoint: "≤768px", rule: "lecteur sticky bas" },
+      { breakpoint: "≤480px", rule: "jaquettes 1 col" }
+    ],
+    animations: ["waveform", "lecteur sticky", "hover play", "apparition douce"]
+  },
+  {
+    id: "app-showcase",
+    name: "App Showcase",
+    tagline: "Vitrine app mobile, mockups 3D, téléchargement évident",
+    industries: ["application mobile", "app", "ios", "android", "mobile", "launch", "produit mobile"],
+    traits: { technological: .7, minimal: .6, playful: .5, colorful: .5, immersive3d: .5 },
+    pages: [
+      { name: "Home", sections: [
+        { name: "Hero mockup téléphone", purpose: "produit en main" },
+        { name: "Fonctionnalités", purpose: "valeur" },
+        { name: "Carrousel de captures", purpose: "preuve" },
+        { name: "Avis stores", purpose: "confiance" },
+        { name: "Télécharger", purpose: "conversion" }
+      ] },
+      { name: "Fonctionnalités", sections: [{ name: "Par usage", purpose: "détail" }] },
+      { name: "Captures", sections: [{ name: "Galerie d'écrans", purpose: "exploration" }] },
+      { name: "Tarifs", sections: [{ name: "Freemium & pro", purpose: "monétisation" }] }
+    ],
+    visualStyle: { colors: ["#0B0F14", "#F2F6FA", "#00C2A8", "#7C8FA3", "#141B24"], typography: "Space Grotesk (titres) + Inter (texte)", typographyStack: { display: "Space Grotesk", body: "Inter" }, spacing: "Système 8pt produit, mockups flottants, radius 20px", animations: ["tilt 3D du téléphone", "captures pilotées au scroll", "badges stores pulsés", "apparition au scroll"], imagery: "Mockups d'app, captures d'écran, mains tenant le téléphone", moodboardKeywords: ["turquoise", "nuit", "glass", "mobile"] },
+    components: [
+      { name: "Navigation", variant: "sticky glass", description: "Fonctions, captures, télécharger", pages: ["*"] },
+      { name: "Mockup 3D", variant: "tilt interactif", description: "Téléphone qui suit la souris", pages: ["Home"] },
+      { name: "Carrousel captures", variant: "scroll", description: "Écrans alignés, drag horizontal", pages: ["Captures", "Home"] },
+      { name: "Badges stores", variant: "App Store / Play", description: "Boutons de téléchargement officiels", pages: ["Home"] }
+    ],
+    threeDElements: [{ concept: "Mockup téléphone 3D inclinable au pointeur", library: "React Three Fiber + drei", placement: "Hero Home", rationale: "le produit devient tangible dès la première seconde" }],
+    responsiveRules: [
+      { breakpoint: "≥1280px", rule: "mockup central 420px" },
+      { breakpoint: "≤768px", rule: "tilt désactivé, swipe captures" },
+      { breakpoint: "≤480px", rule: "badges stores sticky" }
+    ],
+    animations: ["tilt 3D", "captures scroll", "badges pulse", "reveal"]
   }
 ];
 
@@ -293,8 +825,15 @@ export function rankTemplatesForBrief(brief: WebDesignBrief): WebDesignTemplateC
     const reasons: string[] = [];
     let score = 34;
     const industryText = norm(`${brief.industry} ${brief.instruction}`);
-    const industryMatch = template.industries.some((industry) => industryText.includes(norm(industry)));
-    if (industryMatch) { score += 34; reasons.push(`industrie « ${brief.industry} » couverte`); }
+    const matchedIndustries = template.industries.map((industry) => norm(industry)).filter((industry) => industry.length >= 3 && industryText.includes(industry));
+    const industryStrength = matchedIndustries.reduce((max, keyword) => Math.max(max, keyword.length), 0);
+    if (matchedIndustries.length) {
+      // Bonus pondéré par la spécificité du mot-clé industrie : « hôtellerie » (10)
+      // pèse plus qu'un mot-clé générique (« luxe », 4) — départage les égalités
+      // entre templates de luxe au profit du secteur réellement demandé.
+      score += 22 + Math.min(12, industryStrength);
+      reasons.push(`industrie « ${brief.industry} » couverte`);
+    }
     let traitMatch = 0;
     let traitTotal = 0;
     for (const [trait, value] of Object.entries(template.traits)) {
@@ -318,7 +857,7 @@ export function rankTemplatesForBrief(brief: WebDesignBrief): WebDesignTemplateC
       reasons: [...new Set(reasons)].slice(0, 4)
     };
   });
-  return scored.sort((a, b) => b.compatibility - a.compatibility).slice(0, 3);
+  return scored.sort((a, b) => b.compatibility - a.compatibility).slice(0, 5);
 }
 
 export function templateById(id: string): WebDesignTemplate | undefined {

@@ -100,6 +100,12 @@ export function analyzeTask(messages: OpenRouterChatMessage[]): TaskProfile {
   if (/\b(raison|reason|analyse|pourquoi|démontre|demontre|math|logique|stratég|strategie|diagnostic|cause|critique|hypothèse|hypothese)\b/i.test(prompt)) skills.add("reasoning");
   if (/\b(vite|rapide|rapidement|court|bref|simple)\b/i.test(prompt)) skills.add("speed");
   if (websiteBuild) { skills.add("coding"); skills.add("tools"); skills.add("writing"); skills.add("vision"); }
+  // Attached images/documents force their skills regardless of wording: the
+  // Brain must route to a vision/document-capable model even if the user only
+  // writes "que penses-tu de ça ?".
+  const latestUserRow = [...messages].reverse().find((item) => item.role === "user");
+  if (latestUserRow?.images?.length) skills.add("vision");
+  if (latestUserRow?.files?.length) skills.add("documents");
   if (!skills.size) { skills.add("reasoning"); skills.add("writing"); }
 
   const qualityRequested = websiteBuild || /\b(meilleur resultat|meilleur résultat|meilleur possible|vraiment bon|tres bon resultat|très bon résultat|qualite maximale|qualité maximale|production[- ]ready|commercialisable|professionnel|propre et complet|tres complet|très complet|soigne|soigné|premium|haut de gamme|sans compromis|fais au mieux|prends le temps|prend le temps)\b/i.test(prompt);

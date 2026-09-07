@@ -1,4 +1,4 @@
-import type { WebDesignBlueprint } from "./types";
+import type { WebDesignBlueprint, WebDesignTemplate } from "./types";
 
 /**
  * SOPHENIC WEB DESIGN ENGINE — PREVIEW.
@@ -147,6 +147,7 @@ export function buildDesignPreviewHtml(blueprint: WebDesignBlueprint): string {
   @media (max-width:768px) { .cards { grid-template-columns:1fr 1fr; } .bar nav { display:none; } }
   @media (max-width:480px) { .cards { grid-template-columns:1fr; } .page-head h2 { font-size:26px; } }
   @media (prefers-reduced-motion: reduce) { .card { animation:none; } }
+  .watermark { position:fixed; right:14px; bottom:14px; z-index:50; padding:7px 13px; border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.14em; background:color-mix(in srgb, var(--fg) 88%, transparent); color:var(--bg); opacity:.92; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -155,10 +156,110 @@ export function buildDesignPreviewHtml(blueprint: WebDesignBlueprint): string {
   ${threeDNote}
   ${animationsNote}
   <footer class="apercu">Aperçu du design — SOPHENIC Web Design Engine · blueprint ${escapeHtml(blueprint.mode)}${blueprint.templateName ? ` (base ${escapeHtml(blueprint.templateName)})` : ""} · ce document est une visualisation, pas le code du site</footer>
+  <div class="watermark">✦ SOPHENIC AI</div>
 </body>
 </html>`;
 }
 
 function slug(value: string): string {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "page";
+}
+
+/**
+ * Aperçu COMPLET d'un template : toutes les pages navigables (onglets),
+ * identité visuelle du template, et badge « SOPHENIC AI » — l'utilisateur
+ * teste le template dans son intégralité avant de le sélectionner.
+ */
+export function buildTemplatePreviewHtml(template: WebDesignTemplate, brandLabel?: string): string {
+  const [background, foreground, accent, support, surface] = [
+    template.visualStyle.colors[0] || "#FFFFFF",
+    template.visualStyle.colors[1] || "#111111",
+    template.visualStyle.colors[2] || "#4F46E5",
+    template.visualStyle.colors[3] || "#666666",
+    template.visualStyle.colors[4] || "#F3F4F6"
+  ];
+  const display = template.visualStyle.typographyStack?.display || "Inter";
+  const body = template.visualStyle.typographyStack?.body || "Inter";
+  const label = brandLabel || template.name;
+  const tabs = template.pages.map((page, index) => `<button class="tab${index === 0 ? " active" : ""}" data-page="${index}" onclick="showPage(${index})">${escapeHtml(page.name)}</button>`).join("");
+  const pagesHtml = template.pages.map((page, pageIndex) => {
+    const sections = page.sections.map((section, sectionIndex) => {
+      const isCta = /cta|conversion|r[ée]servation|rendez|booking|don|t[ée]l[ée]charger|billet/i.test(section.name);
+      if (isCta) {
+        return `<section class="cta"><h3>${escapeHtml(section.name)}</h3><p class="muted">${escapeHtml(section.purpose)}</p><div class="buttons"><span class="btn primary">Action principale</span><span class="btn ghost">En savoir plus</span></div></section>`;
+      }
+      const isHero = sectionIndex === 0 && pageIndex === 0;
+      if (isHero) {
+        return `<section class="hero"><p class="eyebrow">${escapeHtml(template.tagline.slice(0, 60))}</p><h1>${escapeHtml(label)}</h1><p class="lead">${escapeHtml(template.industries.slice(0, 4).join(" · "))}</p><div class="buttons"><span class="btn primary">Action principale</span><span class="btn ghost">Découvrir</span></div></section>`;
+      }
+      const gradient = PLACEHOLDER_GRADIENTS[(sectionIndex + pageIndex) % PLACEHOLDER_GRADIENTS.length];
+      return `<section><h3>${escapeHtml(section.name)}</h3><p class="muted">${escapeHtml(section.purpose)}</p><div class="cards"><div class="card" style="background:${gradient}"></div><div class="card" style="background:${gradient}"></div><div class="card" style="background:${gradient}"></div></div></section>`;
+    }).join("\n");
+    return `<div class="page${pageIndex === 0 ? "" : " hidden"}" data-pageindex="${pageIndex}"><header class="page-head"><span class="page-index">${pageIndex + 1}</span><h2>${escapeHtml(page.name)}</h2><span class="muted small">${page.sections.length} sections</span></header>${sections}</div>`;
+  }).join("\n");
+  const threeDNote = template.threeDElements.length ? `<div class="badge">3D · ${template.threeDElements.map((element) => escapeHtml(element.library)).join(" · ")}</div>` : "";
+  const motionNote = `<div class="badge">Motion · ${template.visualStyle.animations.map(escapeHtml).slice(0, 4).join(" · ")}</div>`;
+
+  return `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(template.name)} — Template SOPHENIC AI</title>
+<style>
+  :root { --bg:${background}; --fg:${foreground}; --accent:${accent}; --support:${support}; --surface:${surface}; --display:${fontStack(display)}; --body:${fontStack(body)}; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--fg); font-family:var(--body); line-height:1.55; }
+  .bar { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:12px; padding:12px 20px; background:color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter:blur(10px); border-bottom:1px solid color-mix(in srgb, var(--fg) 14%, transparent); flex-wrap:wrap; }
+  .bar .logo { font-family:var(--display); font-size:16px; letter-spacing:.03em; }
+  .bar .brand { font-size:9px; font-weight:800; letter-spacing:.18em; color:var(--accent); }
+  .tabs { display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .tab { border:none; cursor:pointer; background:transparent; color:var(--support); font-family:var(--body); font-size:11px; font-weight:600; padding:6px 11px; border-radius:999px; }
+  .tab.active { background:var(--accent); color:var(--bg); }
+  .page { max-width:1040px; margin:0 auto; padding:46px 22px 20px; }
+  .page.hidden { display:none; }
+  .page-head { display:flex; align-items:baseline; gap:12px; border-bottom:1px solid color-mix(in srgb, var(--fg) 12%, transparent); padding-bottom:12px; margin-bottom:26px; }
+  .page-head h2 { font-family:var(--display); font-size:32px; }
+  .page-index { font-family:var(--display); font-size:20px; color:var(--accent); }
+  .hero { text-align:center; padding:52px 14px 42px; }
+  .eyebrow { text-transform:uppercase; letter-spacing:.26em; font-size:10px; color:var(--accent); margin-bottom:12px; }
+  .hero h1 { font-family:var(--display); font-size:clamp(40px, 8vw, 78px); line-height:1.05; margin-bottom:16px; }
+  .lead { max-width:620px; margin:0 auto 24px; color:var(--support); font-size:15px; }
+  .buttons { display:flex; gap:12px; justify-content:center; margin:20px 0; flex-wrap:wrap; }
+  .btn { border-radius:999px; padding:12px 25px; font-weight:700; font-size:13px; }
+  .btn.primary { background:var(--accent); color:var(--bg); }
+  .btn.ghost { border:1px solid color-mix(in srgb, var(--fg) 30%, transparent); color:var(--fg); }
+  section { margin-bottom:40px; }
+  section h3 { font-family:var(--display); font-size:24px; margin-bottom:6px; }
+  .muted { color:var(--support); font-size:13px; }
+  .small { font-size:11px; }
+  .cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:14px; }
+  .card { aspect-ratio:4/3; border-radius:14px; border:1px solid color-mix(in srgb, var(--fg) 10%, transparent); animation: rise .8s ease-out both; }
+  .cta { text-align:center; background:var(--surface); border-radius:22px; padding:40px 18px; }
+  .badge { max-width:1040px; margin:6px auto 22px; padding:9px 22px; font-size:11px; color:var(--support); border-left:3px solid var(--accent); }
+  footer.apercu { text-align:center; padding:26px; font-size:10px; color:var(--support); letter-spacing:.08em; text-transform:uppercase; }
+  .watermark { position:fixed; right:14px; bottom:14px; z-index:50; padding:7px 13px; border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.14em; background:var(--accent); color:var(--bg); opacity:.95; pointer-events:none; }
+  @keyframes rise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+  @media (max-width:768px) { .cards { grid-template-columns:1fr 1fr; } .tabs { margin-left:0; } }
+  @media (max-width:480px) { .cards { grid-template-columns:1fr; } }
+  @media (prefers-reduced-motion: reduce) { .card { animation:none; } }
+</style>
+</head>
+<body>
+  <div class="bar"><span class="brand">✦ SOPHENIC AI</span><span class="logo">${escapeHtml(template.name)}</span><div class="tabs">${tabs}</div></div>
+  ${pagesHtml}
+  ${threeDNote}
+  ${motionNote}
+  <div class="badge">Structure : ${template.pages.length} pages · ${template.pages.reduce((sum, page) => sum + page.sections.length, 0)} sections · ${template.components.length} composants — identité visuelle finale générée pour ta marque.</div>
+  <footer class="apercu">Template ✦ SOPHENIC AI — structure de départ, testable dans son intégralité. Après sélection, SOPHENIC re-personnalise tout (couleurs, typographie, animations) pour ta marque.</footer>
+  <div class="watermark">✦ SOPHENIC AI</div>
+  <script>
+    function showPage(index) {
+      document.querySelectorAll("[data-pageindex]").forEach(function (page) { page.classList.toggle("hidden", Number(page.getAttribute("data-pageindex")) !== index); });
+      document.querySelectorAll(".tab").forEach(function (tab) { tab.classList.toggle("active", Number(tab.getAttribute("data-page")) === index); });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  </script>
+</body>
+</html>`;
 }
