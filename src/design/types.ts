@@ -1,4 +1,6 @@
-export type DesignDomain = "architecture" | "interior" | "web" | "uiux" | "product";
+export type DesignDomain = "architecture" | "interior" | "web" | "uiux" | "product" | "webdesign";
+// V8.3 — état du SOPHENIC WEB DESIGN ENGINE (blueprint, brief, templates).
+export type { WebDesignState, WebDesignBlueprint, WebDesignBrief, WebDesignMode } from "./web-design/types";
 export type DesignProjectKind = "web" | "architecture" | "object3d";
 export type DesignUnit = "m" | "cm" | "mm" | "px";
 export type DesignStage = "analysis" | "understanding" | "proposals" | "choice" | "generation" | "simulation" | "verification" | "optimization" | "final";
@@ -287,6 +289,8 @@ export type DesignProject = {
   assets: DesignAsset[];
   digital: DesignDigitalSpec;
   webWorkspace?: DesignWebWorkspace;
+  /** V8.3 — SOPHENIC WEB DESIGN ENGINE : blueprint de design de site (aucun code applicatif). */
+  webDesign?: import("./web-design/types").WebDesignState;
   product: DesignProductSpec;
   variants: DesignVariant[];
   simulations: DesignSimulationResult[];

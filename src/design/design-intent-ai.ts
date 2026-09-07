@@ -13,6 +13,7 @@ import type { DesignIntentSummary, DesignProject, DesignReferenceAnalysis } from
  */
 
 export type DesignIntentEffortMode = "quick" | "auto" | "deep";
+export type BrainChatMessage = { role: "user" | "assistant"; content: string };
 export type DesignIntentResolution = { intent: DesignIntentSummary; origin: "brain" | "heuristic"; notice?: string };
 
 const INTENT_JSON_SCHEMA_PROMPT = `Tu es SOPHENIC Design Intent Engine, l'architecte-concepteur senior du module Design. Tu transformes une demande utilisateur + des analyses d'images de référence en un DESIGN INTENT JSON strict. Tu ne crées aucun plan d'action : uniquement l'intention de conception.
@@ -43,7 +44,6 @@ RÈGLES :
 - Deux intents différents doivent donner des architectures structurellement différentes (hauteurs, volumes, langage structurel, vocabulaire mobilier).
 - Ne invente jamais de dimensions non déduisibles ; reste dans les fourchettes données.`;
 
-type BrainChatMessage = { role: "user" | "assistant"; content: string };
 
 function parseJsonLoose(text: string): Record<string, unknown> | null {
   const trimmed = (text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");

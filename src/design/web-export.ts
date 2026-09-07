@@ -34,3 +34,21 @@ export async function buildWebProjectZip(project: DesignProject): Promise<Blob> 
 export async function downloadWebProject(project: DesignProject): Promise<void> {
   const blob = await buildWebProjectZip(project); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${project.name.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() || "sophenic-site"}.zip`; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1200);
 }
+
+/**
+ * SOPHENIC WEB DESIGN ENGINE — writer ZIP générique (contenus texte),
+ * réutilisé par l'export SOPHENIC_WEB_DESIGN_PROJECT.zip.
+ */
+export function buildFilesZip(files: Array<{ path: string; content: string }>): Blob {
+  const localParts: Uint8Array[] = []; const centralParts: Uint8Array[] = []; let offset = 0; const dt = dosDateTime();
+  for (const file of files.slice(0, 500)) {
+    const name = encoder.encode(file.path.replace(/^\/+/, "")); const data = encoder.encode(file.content || ""); const crc = crc32(data);
+    const local = join([u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(dt.time), u16(dt.date), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), name, data]);
+    localParts.push(local);
+    const central = join([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(dt.time), u16(dt.date), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), name]);
+    centralParts.push(central); offset += local.length;
+  }
+  const central = join(centralParts); const local = join(localParts); const count = centralParts.length;
+  const end = join([u32(0x06054b50), u16(0), u16(0), u16(count), u16(count), u32(central.length), u32(local.length), u16(0)]);
+  return new Blob([asArrayBuffer(local), asArrayBuffer(central), asArrayBuffer(end)], { type: "application/zip" });
+}
