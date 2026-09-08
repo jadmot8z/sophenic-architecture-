@@ -21,7 +21,7 @@
     "desktop:verify": "npm run build:electron && node scripts/verify-desktop.mjs",
     "doctor:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows-doctor.ps1",
     "verify:package": "node scripts/verify-package.mjs",
-    "test:sophenic": "node scripts/test-sophenic.mjs && node scripts/test-sophenic-design.mjs && node scripts/test-sophenic-design-v81.mjs && node scripts/test-sophenic-design-v82.mjs && node scripts/test-sophenic-webdesign.mjs",
+    "test:sophenic": "node scripts/test-sophenic.mjs && node scripts/test-sophenic-design.mjs && node scripts/test-sophenic-design-v81.mjs && node scripts/test-sophenic-design-v82.mjs && node scripts/test-sophenic-webdesign.mjs && node scripts/test-sophenic-model3d.mjs",
     "qa": "npm run verify:source && npm run test:sophenic && npm run typecheck",
     "package:win:installer": "electron-builder --config electron-builder.yml --win nsis --x64",
     "normalize:standalone": "node scripts/normalize-standalone.mjs",
@@ -35,7 +35,8 @@
     "test:design-v81": "node scripts/test-sophenic-design-v81.mjs",
     "postinstall": "node scripts/prepare-three-assets.mjs",
     "test:design-v82": "node scripts/test-sophenic-design-v82.mjs",
-    "test:webdesign": "node scripts/test-sophenic-webdesign.mjs"
+    "test:webdesign": "node scripts/test-sophenic-webdesign.mjs",
+    "test:model3d": "node scripts/test-sophenic-model3d.mjs"
   },
   "dependencies": {
     "@huggingface/inference": "4.13.25",

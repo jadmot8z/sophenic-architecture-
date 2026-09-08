@@ -291,6 +291,7 @@ export type DesignProject = {
   webWorkspace?: DesignWebWorkspace;
   /** V8.3 — SOPHENIC WEB DESIGN ENGINE : blueprint de design de site (aucun code applicatif). */
   webDesign?: import("./web-design/types").WebDesignState;
+  model3d?: import("./model-3d/types").Model3DProjectState;
   product: DesignProductSpec;
   variants: DesignVariant[];
   simulations: DesignSimulationResult[];

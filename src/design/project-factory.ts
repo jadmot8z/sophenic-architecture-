@@ -111,6 +111,7 @@ export function createDesignProject(name = "Nouveau projet", domain: DesignDomai
       changes: []
     },
     product: { category: "furniture", width: 1.8, depth: 0.78, height: 0.82, materialId: "mat-fabric", ergonomicsNotes: ["Rayons d’arêtes à vérifier", "Tester stabilité et assemblages", "Valider les dimensions avec un prototype physique"] },
+    model3d: domain === "product" ? { library: [] } : undefined,
     variants: [],
     simulations: [],
     aiMessages: [],

@@ -16,6 +16,7 @@ import { ArchitectureViewport3D, type ArchitectureSelection } from "./architectu
 import { ArchitectureThinkingTimeline, type ArchitectureWorkStep, type ArchitectureWorkStatus } from "./architecture-thinking-timeline";
 import { DesignWebPreview, type WebPreviewSelection } from "./design-web-preview";
 import { WebDesignWorkspace } from "./web-design-workspace";
+import { Model3DWorkspace } from "./model-3d-workspace";
 import { applyDesignActions, fastDesignCommand } from "@/design/commands";
 import { cloneDesignProject, createDesignProject } from "@/design/project-factory";
 import { requestDesignAi } from "@/design/ai";
@@ -49,7 +50,7 @@ const copy = <T,>(value: T): T => structuredClone(value);
 const projectKinds: Array<{ domain: DesignDomain; label: string; eyebrow: string; description: string; icon: typeof Palette }> = [
   { domain: "webdesign", label: "Web Design", eyebrow: "SITES · BRAND · CONVERSION", description: "L'agence créative IA : SOPHENIC conçoit le design complet du site (blueprint original ou template re-personnalisé) avant toute ligne de code.", icon: Palette },
   { domain: "architecture", label: "Architecture", eyebrow: "MAISON · ESPACES", description: "Commence par une maison vide, tourne autour à 360°, entre dans chaque pièce puis meuble-la avec Sophenic.", icon: Building2 },
-  { domain: "product", label: "Design 3D", eyebrow: "OBJETS · MOBILIER", description: "Conçois un objet paramétrique, change ses dimensions et matériaux, explore des variantes en 3D.", icon: Box }
+  { domain: "product", label: "Design 3D", eyebrow: "OBJETS · MODÈLES · SKETCHFAB", description: "Décris l'objet que tu veux : SOPHENIC trouve les 5 meilleurs modèles Sketchfab, tu les explores en 3D (caméra libre façon Blender) puis tu télécharges ceux que tu veux.", icon: Box }
 ];
 
 const planTools: Array<{ id: DesignTool; label: string; icon: typeof MousePointer2 }> = [
@@ -292,7 +293,7 @@ export function DesignWorkspace({ effortMode = "auto" }: Props) {
   };
 
   const createProject = (domain: DesignDomain) => {
-    const defaultName = domain === "webdesign" ? "Nouveau design web" : domain === "web" ? "Nouveau site" : domain === "product" ? "Nouvel objet 3D" : "Nouveau projet d’architecture";
+    const defaultName = domain === "webdesign" ? "Nouveau design web" : domain === "web" ? "Nouveau site" : domain === "product" ? "Nouvelle recherche de modèles 3D" : "Nouveau projet d’architecture";
     const project = createDesignProject(newName.trim() || defaultName, domain); setProjects((rows) => [project, ...rows]); setNewName(""); openProject(project); setSaveState("dirty");
   };
 
@@ -666,6 +667,7 @@ Vérification automatique : ${quality.report.afterScore}/100${quality.report.fix
 
   // V8.3 — SOPHENIC WEB DESIGN ENGINE : atelier dédié (blueprint, pas de code).
   if (active.domain === "webdesign") return <WebDesignWorkspace project={active} onMutate={mutate} onBack={() => setScreen("choose")} effortMode={effortMode} />;
+  if (active.domain === "product" && active.model3d) return <Model3DWorkspace project={active} onMutate={mutate} onBack={() => setScreen("choose")} effortMode={effortMode} />;
 
   const webWorkspace = active.webWorkspace;
   const lastWebChange = webWorkspace?.changes.find((item) => item.status === "applied");
