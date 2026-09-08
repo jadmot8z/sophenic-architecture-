@@ -8,6 +8,7 @@ import { DesktopWebRuntime } from "./runtime/web";
 import { WebResearchConnector } from "./runtime/code-engine/web-research";
 import { analyzeDesignImage } from "./runtime/design-vision";
 import { designAssetEngine } from "./runtime/design-asset-engine";
+import { clearRailwayToken, railwayStatus, saveRailwayToken } from "./runtime/railway-connection";
 import { configureOpenRouter, inspectEngineConfig, inspectModelSelection, prepareHermesProvider, rememberUserLanguage, setDefaultModel, setPersonalization } from "./runtime/config";
 import { engineSetupStatus, ensureEngineInstalled } from "./runtime/provision";
 import { getOpenRouterAccountInfo, listOpenRouterModels, type OpenRouterChatMessage } from "./runtime/openrouter";
@@ -481,6 +482,9 @@ function registerDesktopIpc(): void {
     if (typeof body.dataUrl !== "string") throw new Error("Image Design manquante.");
     return analyzeDesignImage({ dataUrl: body.dataUrl, name: typeof body.name === "string" ? body.name : undefined, prompt: typeof body.prompt === "string" ? body.prompt : undefined });
   });
+  ipcMain.handle("sophenic:railway:status", async (event, test: unknown) => { assertTrustedFrame(event); return railwayStatus(test === true); });
+  ipcMain.handle("sophenic:railway:save", async (event, token: unknown) => { assertTrustedFrame(event); if (typeof token !== "string") throw new Error("Token Railway invalide."); return saveRailwayToken(token); });
+  ipcMain.handle("sophenic:railway:clear", async (event) => { assertTrustedFrame(event); return clearRailwayToken(); });
   ipcMain.handle("sophenic:design:asset-status", async (event, test: unknown) => { assertTrustedFrame(event); return designAssetEngine.status(test === true); });
   ipcMain.handle("sophenic:design:sketchfab-save", async (event, token: unknown) => { assertTrustedFrame(event); if (typeof token !== "string") throw new Error("API Token Sketchfab invalide."); return designAssetEngine.saveSketchfabToken(token); });
   ipcMain.handle("sophenic:design:sketchfab-clear", async (event) => { assertTrustedFrame(event); return designAssetEngine.clearSketchfabToken(); });

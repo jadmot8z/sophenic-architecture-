@@ -335,6 +335,11 @@ declare global {
         openPath(value: string): Promise<boolean>;
         onPlannerCompleted(listener: (payload: { id: string; title: string; ok: boolean; message: string; detail?: string; completedAt: string }) => void): () => void;
       };
+      railway: {
+        status(test?: boolean): Promise<{ configured: boolean; verified: boolean; account?: string; projects?: string[]; detail?: string }>;
+        saveToken(token: string): Promise<{ configured: boolean; verified: boolean; account?: string; projects?: string[]; detail?: string }>;
+        clearToken(): Promise<{ configured: boolean; verified: boolean; detail: string }>;
+      };
       design: {
         analyzeImage(input: { dataUrl: string; name?: string; prompt?: string }): Promise<{ provider: string; model: string; analysis: string }>;
         assetStatus(test?: boolean): Promise<{ sketchfab: { configured: boolean; verified: boolean; account?: string; detail?: string } }>;

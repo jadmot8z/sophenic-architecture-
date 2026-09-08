@@ -90,6 +90,11 @@ contextBridge.exposeInMainWorld("sophenicDesktop", {
       return () => ipcRenderer.removeListener("sophenic:planner:completed", handler);
     }
   },
+  railway: {
+    status: (test = false) => ipcRenderer.invoke("sophenic:railway:status", test),
+    saveToken: (token: string) => ipcRenderer.invoke("sophenic:railway:save", token),
+    clearToken: () => ipcRenderer.invoke("sophenic:railway:clear")
+  },
   design: {
     analyzeImage: (input: { dataUrl: string; name?: string; prompt?: string }) => ipcRenderer.invoke("sophenic:design:analyze-image", input),
     assetStatus: (test = false) => ipcRenderer.invoke("sophenic:design:asset-status", test),
