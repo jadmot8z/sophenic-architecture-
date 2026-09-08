@@ -57,6 +57,8 @@ export function PluginCenter({ onGoogleConnect, googleBusy, onChanged }: { onGoo
   const [message, setMessage] = useState("");
   const [databaseTarget, setDatabaseTarget] = useState<PluginDefinition | null>(null);
   const [databaseUri, setDatabaseUri] = useState("");
+  const [tokenTarget, setTokenTarget] = useState<PluginDefinition | null>(null);
+  const [tokenValue, setTokenValue] = useState("");
 
   const refresh = useCallback(async () => {
     if (!desktop?.plugins) return;
@@ -73,6 +75,13 @@ export function PluginCenter({ onGoogleConnect, googleBusy, onChanged }: { onGoo
       if (plugin.auth === "database") {
         setDatabaseTarget(plugin);
         setDatabaseUri("");
+        setBusy("");
+        return;
+      }
+      if (plugin.id === "vercel") {
+        // Vercel : connexion par token personnel (vcp_…) — jamais d'OAuth silencieux.
+        setTokenTarget(plugin);
+        setTokenValue("");
         setBusy("");
         return;
       }
@@ -103,6 +112,23 @@ export function PluginCenter({ onGoogleConnect, googleBusy, onChanged }: { onGoo
     finally { setBusy(""); }
   };
 
+  const submitToken = async () => {
+    if (!desktop?.developerConnections?.saveToken || !tokenTarget) return;
+    const target = tokenTarget;
+    const token = tokenValue.trim();
+    if (!token) { setMessage(`Colle d’abord le token ${target.name}.`); return; }
+    setBusy(target.id); setMessage("");
+    try {
+      const result = await desktop.developerConnections.saveToken("vercel", token);
+      const connection = result.connections.find((item) => item.provider === "vercel");
+      setMessage(connection?.connected ? `Vercel connecté${connection.username ? ` : ${connection.username}` : ""}. Token validé et chiffré dans le coffre.` : "Vercel n’a pas confirmé ce token.");
+      setTokenValue("");
+      setTokenTarget(null);
+      await refresh(); onChanged?.();
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(""); }
+  };
+
   const disconnect = async (plugin: PluginDefinition) => {
     if (!desktop?.plugins) return;
     setBusy(plugin.id); setMessage("");
@@ -112,6 +138,27 @@ export function PluginCenter({ onGoogleConnect, googleBusy, onChanged }: { onGoo
   };
 
   return <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+    {tokenTarget && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-[#e7d8be] bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-zinc-950">
+        <div className="flex items-center gap-2 text-sm font-semibold"><Triangle className="size-4" />Connecter {tokenTarget.name} par token</div>
+        <p className="mt-2 text-xs leading-5 text-zinc-500">Vercel se connecte avec un <b>token personnel</b> (pas d’écran d’autorisation). Étape 1 : ouvre la page des tokens Vercel. Étape 2 : crée un token (il commence par <b>vcp_</b>). Étape 3 : colle-le ci-dessous — il est validé par l’API Vercel puis chiffré dans le coffre natif, jamais enregistré dans le code ni les projets.</p>
+        <div className="mt-3"><Button size="sm" variant="outline" onClick={() => { if (desktop?.developerConnections?.openPortal) void desktop.developerConnections.openPortal("vercel", "token"); else window.open("https://vercel.com/account/tokens", "_blank", "noopener,noreferrer"); }}><ExternalLink className="size-3.5" />Ouvrir Vercel → Account → Tokens</Button></div>
+        <Input
+          className="mt-3 font-mono text-xs"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={tokenValue}
+          onChange={(event) => setTokenValue(event.target.value)}
+          placeholder="vcp_…"
+          onKeyDown={(event) => { if (event.key === "Enter" && tokenValue.trim() && busy !== tokenTarget.id) void submitToken(); }}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => { setTokenTarget(null); setTokenValue(""); }}>Annuler</Button>
+          <Button disabled={!tokenValue.trim() || busy === tokenTarget.id} onClick={() => void submitToken()}>{busy === tokenTarget.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}Enregistrer & tester</Button>
+        </div>
+      </div>
+    </div>}
     {databaseTarget && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border border-[#e7d8be] bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-zinc-950">
         <div className="flex items-center gap-2 text-sm font-semibold"><Database className="size-4" />Connecter {databaseTarget.name}</div>

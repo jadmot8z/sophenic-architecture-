@@ -290,6 +290,10 @@ declare global {
           connections: Array<{ provider: "github" | "vercel"; connected: boolean; username?: string; name?: string; accountId?: string; scopes: string[]; connectedAt?: string; expiresAt?: string; credentialType?: "oauth" | "personal_access_token" }>;
           configuration: { github: { configured: boolean; mode: "device"; authorizationUrl: string; tokenPortalUrl: string }; vercel: { configured: boolean; mode: "token"; authorizationUrl: string; dashboardUrl: string } };
         }>;
+        saveToken(provider: "github" | "vercel", token: string): Promise<{
+          connections: Array<{ provider: "github" | "vercel"; connected: boolean; username?: string; name?: string; accountId?: string; scopes: string[]; connectedAt?: string; expiresAt?: string; credentialType?: "oauth" | "personal_access_token" }>;
+          configuration: { github: { configured: boolean; mode: "device"; authorizationUrl: string; tokenPortalUrl: string }; vercel: { configured: boolean; mode: "token"; authorizationUrl: string; dashboardUrl: string } };
+        }>;
         connect(provider: "github" | "vercel"): Promise<{
           connections: Array<{ provider: "github" | "vercel"; connected: boolean; username?: string; name?: string; accountId?: string; scopes: string[]; connectedAt?: string; expiresAt?: string; credentialType?: "oauth" | "personal_access_token" }>;
           configuration: { github: { configured: boolean; mode: "device"; authorizationUrl: string; tokenPortalUrl: string }; vercel: { configured: boolean; mode: "token"; authorizationUrl: string; dashboardUrl: string } };

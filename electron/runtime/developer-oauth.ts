@@ -201,8 +201,11 @@ async function githubDeviceConnect(connectors: CodeConnectors): Promise<void> {
 async function connectVercelFromStoredToken(connectors: CodeConnectors): Promise<void> {
   const token = currentToken("vercel") || (process.env.SOPHENIC_VERCEL_TOKEN || process.env.VERCEL_TOKEN || "").trim();
   if (!token) {
+    // Vercel n'a pas de flux OAuth natif ici : la connexion se fait par token
+    // personnel. On ouvre la page des tokens et on GUIDE explicitement au lieu
+    // de revenir silencieusement (l'utilisateur croyait que « ça ne marchait pas »).
     await shell.openExternal(VERCEL_TOKEN_URL);
-    return;
+    throw new Error("Vercel se connecte par token personnel : crée un token sur la page qui vient de s’ouvrir (Account → Tokens, il commence par vcp_), puis colle-le dans Plugins → Vercel → Connecter.");
   }
 
   connectors.vercel.setToken(token, false);

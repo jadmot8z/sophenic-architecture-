@@ -30,7 +30,7 @@ import { inspectCodeEngines } from "./runtime/code-engines";
 import { validateProviderKeys } from "./runtime/provider-validation";
 import { reportHermesProviderFailure } from "./runtime/sophenic-agent-routing";
 import { buildCodeWorkspaceHandoff, clearCodeWorkspaceCheckpoint, createManagedCodeWorkspace, externalFileInfo, externalProjectInfo, findLatestCodeWorkspaceCheckpoint, saveCodeWorkspaceCheckpoint, type CodeWorkspaceCheckpoint } from "./runtime/code-workspace";
-import { connectDeveloperOAuth, developerOAuthConfiguration, developerOAuthStatus, disconnectDeveloperOAuth, openDeveloperProviderPortal, restoreDeveloperOAuth, testDeveloperVercelUrl, type DeveloperOAuthProvider } from "./runtime/developer-oauth";
+import { connectDeveloperOAuth, developerOAuthConfiguration, developerOAuthStatus, disconnectDeveloperOAuth, openDeveloperProviderPortal, restoreDeveloperOAuth, saveDeveloperPersonalToken, testDeveloperVercelUrl, type DeveloperOAuthProvider } from "./runtime/developer-oauth";
 import { pluginCatalog, pluginStatuses, clearPluginConnection, saveDatabaseConnection, PLUGIN_CATALOG, type DatabasePluginId } from "./runtime/plugin-vault";
 import { clearOAuthBundle, connectPluginOAuth, pluginOAuthBrokerStates, type OAuthConnectOptions, type OAuthPluginId } from "./runtime/plugin-oauth";
 import { invokePluginConnector, pluginToolCatalog, type PluginInvocation } from "./runtime/plugin-connectors";
@@ -360,6 +360,12 @@ function registerDesktopIpc(): void {
     assertTrustedFrame(event);
     if (provider !== "github" && provider !== "vercel") throw new Error("Fournisseur OAuth développeur invalide");
     return { connections: await connectDeveloperOAuth(provider as DeveloperOAuthProvider, runtime.codeEngine), configuration: developerOAuthConfiguration() };
+  });
+  ipcMain.handle("sophenic:developer-connections:save-token", async (event, provider: unknown, token: unknown) => {
+    assertTrustedFrame(event);
+    if (provider !== "github" && provider !== "vercel") throw new Error("Fournisseur développeur invalide");
+    if (typeof token !== "string" || !token.trim() || token.trim().length > 512) throw new Error("Token invalide.");
+    return { connections: await saveDeveloperPersonalToken(provider as DeveloperOAuthProvider, token.trim(), runtime.codeEngine), configuration: developerOAuthConfiguration() };
   });
   ipcMain.handle("sophenic:developer-connections:disconnect", async (event, provider: unknown) => {
     assertTrustedFrame(event);

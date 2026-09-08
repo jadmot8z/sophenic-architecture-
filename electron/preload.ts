@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld("sophenicDesktop", {
     status: () => ipcRenderer.invoke("sophenic:developer-connections:status"),
     connect: (provider: "github" | "vercel") => ipcRenderer.invoke("sophenic:developer-connections:connect", provider),
     disconnect: (provider: "github" | "vercel") => ipcRenderer.invoke("sophenic:developer-connections:disconnect", provider),
+    saveToken: (provider: "github" | "vercel", token: string) => ipcRenderer.invoke("sophenic:developer-connections:save-token", provider, token),
     openPortal: (provider: "github" | "vercel", target: "connect" | "token" | "dashboard" = "connect") => ipcRenderer.invoke("sophenic:developer-connections:open-portal", provider, target),
     testVercelUrl: (url: string) => ipcRenderer.invoke("sophenic:developer-connections:test-vercel-url", url)
   },
