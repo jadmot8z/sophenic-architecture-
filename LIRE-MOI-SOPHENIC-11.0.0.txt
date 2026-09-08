@@ -1,0 +1,13 @@
+SOPHENIC 11.0.0 — PROFESSIONAL VOICE + OAUTH CONNECTORS
+
+1. Application Desktop : npm install, npm run qa, npm run build.
+2. Voix native locale : lancer START-SOPHENIC-VOICE.ps1 (le script configure voice_engine/.env et appaire Electron automatiquement).
+3. OAuth production : lire OAUTH-PLUGIN-HUB-EDITEUR.md et déployer oauth-broker une seule fois côté éditeur.
+
+L'utilisateur final ne doit saisir aucun Client ID, Client Secret, token ou API Key dans Plugins. Tant que le broker n'est pas réellement provisionné chez les fournisseurs, SOPHENIC refuse proprement la connexion au lieu de la simuler.
+
+Documents techniques :
+- VOICE-ARCHITECTURE.md
+- OAUTH-PLUGIN-HUB-EDITEUR.md
+- MEMOIRE-HISTORIQUE-ARCHITECTURE.md
+- CHANGELOG-SOPHENIC-11.0.0-PRO-VOICE-OAUTH.md

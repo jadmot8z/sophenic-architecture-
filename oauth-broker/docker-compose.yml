@@ -1,0 +1,6 @@
+services:
+  oauth-broker:
+    build: .
+    restart: unless-stopped
+    env_file: [.env]
+    ports: ["127.0.0.1:8787:8787"]

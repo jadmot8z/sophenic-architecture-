@@ -1,0 +1,18 @@
+SOPHENIC 10.4.0 — CONNECT + VOICE
+
+LANCEMENT WINDOWS / VS CODE
+1. npm install
+2. npm run sophenic:start
+
+PLUGIN HUB
+- L'utilisateur final ne saisit aucune clé dans Plugins.
+- Cliquer Connecter ouvre le fournisseur officiel quand OAuth est supporté.
+- GitHub utilise Device Flow.
+- Les apps OAuth des autres fournisseurs doivent être enregistrées UNE FOIS par l'éditeur de SOPHENIC.
+- Voir OAUTH-PLUGIN-HUB-EDITEUR.md.
+
+VOICE
+- Le bouton micro se trouve à côté du bouton Envoyer.
+- Sans serveur GPU, SOPHENIC utilise automatiquement les voix et la reconnaissance Windows/Chromium.
+- Si voice-service est lancé, VoxCPM2 + faster-whisper prennent automatiquement le relais.
+- Pour la qualité VoxCPM2 maximale : cd voice-service puis docker compose up -d --build (GPU NVIDIA requis selon la configuration du modèle).

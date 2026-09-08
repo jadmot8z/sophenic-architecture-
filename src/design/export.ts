@@ -1,0 +1,14 @@
+import type { DesignProject } from "./types";
+
+export function designProjectToJson(project: DesignProject): string { return JSON.stringify(project, null, 2); }
+
+export function digitalProjectToHtml(project: DesignProject): string {
+  const ds = project.digital.designSystem;
+  const nodes = project.digital.nodes.map((node) => {
+    const tag = node.kind === "navbar" ? "nav" : node.kind === "footer" ? "footer" : node.kind === "button" ? "button" : "section";
+    const safe = (node.text || node.label).replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[char] || char));
+    const animation = (["fade", "slide", "scale"] as const).includes(node.animation as "fade" | "slide" | "scale") ? node.animation : "none";
+    return `    <${tag} class="node ${node.kind} anim-${animation}" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px;background:${node.background || "#fff"};color:${node.foreground || ds.text};border-radius:${node.radius ?? ds.radius}px">${safe}</${tag}>`;
+  }).join("\n");
+  return `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width,initial-scale=1" />\n<title>${project.name}</title>\n<style>\n:root{--primary:${ds.primary};--surface:${ds.surface};--text:${ds.text};--radius:${ds.radius}px;--space:${ds.spacing}px}*{box-sizing:border-box}body{margin:0;background:var(--surface);color:var(--text);font-family:${JSON.stringify(ds.font)},system-ui,sans-serif}.canvas{position:relative;width:min(100%,1440px);min-height:${project.digital.canvasHeight}px;margin:auto;overflow:hidden}.node{position:absolute;display:flex;align-items:center;justify-content:center;padding:calc(var(--space)*1.25);box-shadow:0 12px 40px rgba(0,0,0,.06);font-weight:600}.hero{font-size:clamp(2rem,5vw,4.8rem);letter-spacing:-.045em;text-align:center}.card{align-items:flex-start;justify-content:flex-start;font-size:1.25rem}.navbar{justify-content:flex-start;gap:24px}.button{background:var(--primary)!important;color:white!important;border:0}.anim-fade{animation:sophenicFade .5s ease both}.anim-slide{animation:sophenicSlide .55s cubic-bezier(.2,.8,.2,1) both}.anim-scale{animation:sophenicScale .45s ease both}@keyframes sophenicFade{from{opacity:0}to{opacity:1}}@keyframes sophenicSlide{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}@keyframes sophenicScale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}@media(prefers-reduced-motion:reduce){.anim-fade,.anim-slide,.anim-scale{animation:none!important}} @media(max-width:800px){.canvas{min-height:auto;padding:16px}.node{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:auto!important;min-height:96px;margin:12px 0}.hero{min-height:320px!important}.navbar{min-height:64px!important}}\n</style>\n</head>\n<body><main class="canvas">\n${nodes}\n</main></body></html>`;
+}
